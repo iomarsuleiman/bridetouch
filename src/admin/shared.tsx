@@ -155,6 +155,7 @@ export function Field({
           value={value}
           required={required}
           autoFocus={autoFocus}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
         />
       ) : (
@@ -168,6 +169,7 @@ export function Field({
           pattern={pattern}
           placeholder={placeholder}
           autoFocus={autoFocus}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
         />
       )}
