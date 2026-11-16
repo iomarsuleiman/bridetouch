@@ -1,11 +1,43 @@
 {
   "name": "bridetouch",
   "private": true,
+  "type": "module",
   "version": "0.1.0",
-  "description": "Handmade boutique storefront and management dashboard preview",
+  "description": "bridetouch storefront and store management",
   "scripts": {
-    "build": "node scripts/build-worker.mjs",
-    "dev": "npx wrangler dev",
-    "deploy": "npm run build && npx wrangler deploy"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "dev:worker": "npx wrangler dev",
+    "build:worker": "node scripts/build-worker.mjs",
+    "deploy": "npm run build:worker && wrangler deploy",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@clerk/react": "^6.18.8",
+    "convex": "^1.50.0",
+    "html-to-image": "^1.11.13",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "sonner": "^2.0.8",
+    "web-push": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/web-push": "^3.6.4",
+    "@vitejs/plugin-react": "^6.3.0",
+    "convex-test": "^0.0.71",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.163.0"
+  },
+  "allowScripts": {
+    "esbuild@0.27.0": true,
+    "esbuild@0.28.2": true,
+    "workerd@1.20261116.1": true
   }
 }

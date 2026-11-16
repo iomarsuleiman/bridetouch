@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "melo-image-api",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-16",
+  "workers_dev": true,
+  "r2_buckets": [
+    {
+      "binding": "IMAGES",
+      "bucket_name": "melo-images"
+    }
+  ],
+  "vars": {
+    "CLERK_ISSUER": "https://humane-satyr-4557.clerk.accounts.dev",
+    "ALLOWED_ORIGINS": "http://localhost:5173,https://melo-handmade-baseline.omaarsuliiman.workers.dev",
+    "CONVEX_URL": "https://resilient-snake-473.eu-west-1.convex.cloud",
+    "DEV_CONVEX_URL": "https://groovy-marlin-763.eu-west-1.convex.cloud"
+  }
+}
