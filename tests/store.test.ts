@@ -52,3 +52,18 @@ test("support links reject unsafe schemes",async()=>{
  await expect(owner.mutation(api.settings.update,{supportUrl:"javascript:alert(1)"})).rejects.toThrow("link");
  await owner.mutation(api.settings.update,{instagramUrl:"https://www.instagram.com/bridetouch",supportUrl:"mailto:support@example.com"});
 });
+
+test("configured free-delivery threshold is enforced in recorded orders",async()=>{
+ const t=await setup();
+ const admin=t.withIdentity({subject:"owner",email:"owner@example.com"});
+ await admin.mutation(api.settings.update,{shipping:25,freeShipping:true,freeShippingMin:150});
+ const below=await t.mutation(api.orders.createCheckout,{...customer});
+ expect(below?.shippingFee).toBe(25);expect(below?.total).toBe(125);
+ const atOrAbove=await t.mutation(api.orders.createCheckout,{...customer,items:[{number:1,qty:2}]});
+ expect(atOrAbove?.shippingFee).toBe(0);expect(atOrAbove?.total).toBe(200);
+ await admin.mutation(api.settings.update,{freeShippingMin:0,freeShipping:false});
+ await t.run(async ctx=>{const p=await ctx.db.query("products").withIndex("by_number",q=>q.eq("number",1)).first();if(p)await ctx.db.patch(p._id,{stock:1});});
+ const disabled=await t.mutation(api.orders.createCheckout,{...customer});
+ expect(disabled?.shippingFee).toBe(25);expect(disabled?.total).toBe(125);
+ await expect(admin.mutation(api.settings.update,{freeShippingMin:-1})).rejects.toThrow("threshold");
+});
