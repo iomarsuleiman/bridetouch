@@ -1,0 +1,44 @@
+name: Prepare Cloudflare direct-deploy bundle
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/build-inline-worker.mjs'
+      - '.github/workflows/bundle-worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITE_CONVEX_URL: https://resilient-snake-473.eu-west-1.convex.cloud
+      VITE_CLERK_PUBLISHABLE_KEY: pk_test_aHVtYW5lLXNhdHlyLTQ1NTcuY2xlcmsuYWNjb3VudHMuZGV2JA==
+      VITE_IMAGE_API_URL: https://melo-image-api.omaarsuliiman.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: node scripts/build-inline-worker.mjs
+      - name: Publish standalone Worker modules to an isolated branch
+        run: |
+          mkdir -p "$RUNNER_TEMP/worker-bundle"
+          cp -R .worker-bundle/. "$RUNNER_TEMP/worker-bundle/"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --orphan direct-deploy-bundle
+          git rm -rf --ignore-unmatch . >/dev/null
+          mkdir -p .worker-bundle
+          cp -R "$RUNNER_TEMP/worker-bundle/." .worker-bundle/
+          git add -f .worker-bundle
+          git commit -m "build: Cloudflare bundle from $GITHUB_SHA"
+          git push origin HEAD:refs/heads/direct-deploy-bundle --force
