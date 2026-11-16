@@ -1,0 +1,11 @@
+{
+  "name": "bridetouch",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Handmade boutique storefront and management dashboard preview",
+  "scripts": {
+    "build": "node scripts/build-worker.mjs",
+    "dev": "npx wrangler dev",
+    "deploy": "npm run build && npx wrangler deploy"
+  }
+}
