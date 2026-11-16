@@ -10,7 +10,7 @@ import { Heading } from "./shared";
 import type { AdminCtx } from "./types";
 
 const TOGGLES: { key: "freeShipping" | "notifications" | "guestCheckout"; title: (min?: number) => string; desc: string }[] = [
-  { key: "freeShipping", title: (min) => `Free delivery over EGP ${min ?? 800}`, desc: "Apply to eligible checkout totals" },
+  { key: "freeShipping", title: (min) => `Free delivery from EGP ${min ?? 800}`, desc: "Apply to eligible checkout totals" },
   { key: "notifications", title: () => "New order alerts", desc: "Show notifications in dashboard" },
   { key: "guestCheckout", title: () => "Guest checkout", desc: "Customers do not need an account" },
 ];
@@ -26,6 +26,8 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
   const [supportUrl, setSupportUrl] = useState(s.supportUrl ?? "");
   const [adminEmails, setAdminEmails] = useState((s.adminEmails ?? []).join(", "));
   const [city, setCity] = useState(s.city);
+  const [shippingFee, setShippingFee] = useState(String(s.shipping ?? 65));
+  const [freeShippingMin, setFreeShippingMin] = useState(String(s.freeShippingMin ?? 800));
   const [content, setContent] = useState({logoImage:s.logoImage || DEFAULT_LOGO,heroTitle:s.heroTitle ?? "A little something, made by hand.",heroDescription:s.heroDescription ?? "Ceramics, little keepsakes and everyday favorites. Each piece has its own kind of charm.",heroImage:s.heroImage ?? "",storyTitle:s.storyTitle ?? "Good things take a little time.",storyDescription:s.storyDescription ?? "Thoughtfully made pieces for the quiet, colorful moments in everyday life.",storyImage:s.storyImage ?? "",catalogTitle:s.catalogTitle ?? "Handmade, for you.",catalogDescription:s.catalogDescription ?? "Every piece is a little different. That is the lovely part.",announcement:s.announcement ?? ""});
   const [navigation, setNavigation] = useState((s.navigation ?? [...new Set(ctx.products.map(p => p.category))].slice(0,2)).join(", "));
   const formRef = useRef<HTMLFormElement>(null);
@@ -37,7 +39,7 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
       return;
     }
     try {
-      await update({ storeName, email, city, ...content, instagramUrl, supportUrl, adminEmails:adminEmails.split(",").map(email => email.trim()).filter(Boolean), navigation: navigation.split(",").map(n => n.trim()).filter(Boolean) });
+      await update({ storeName, email, city, shipping: Number(shippingFee), freeShippingMin: Number(freeShippingMin), ...content, instagramUrl, supportUrl, adminEmails:adminEmails.split(",").map(email => email.trim()).filter(Boolean), navigation: navigation.split(",").map(n => n.trim()).filter(Boolean) });
       toast("Settings saved");
     } catch {
       toast("Could not save settings");
@@ -89,6 +91,15 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
           <h2>Checkout & notifications</h2>
           <p>Changes apply to the live store.</p>
           <NotificationSetup />
+          <div className="field">
+            <label htmlFor="shippingFee">Standard delivery fee (EGP)</label>
+            <input id="shippingFee" name="shippingFee" type="number" min="0" step="0.01" required value={shippingFee} onChange={e => setShippingFee(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="freeShippingMin">Free delivery from (EGP)</label>
+            <input id="freeShippingMin" name="freeShippingMin" type="number" min="0" step="0.01" required value={freeShippingMin} onChange={e => setFreeShippingMin(e.target.value)} />
+            <small>Set the amount here, then enable or disable free delivery below. Changes are saved with the other store settings.</small>
+          </div>
           {TOGGLES.map((t) => (
             <div key={t.key} className="setting-row">
               <span>
