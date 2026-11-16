@@ -183,7 +183,7 @@ export function CheckoutPage({
             Place order · {money(total)} <Icon name="arrow" size="sm" />
           </button>
           <small style={{ color: "#9b9f95" }}>
-            Preview only — no real order or payment will be processed.
+            Your order will be submitted. Payment is collected on delivery.
           </small>
         </form>
       </div>
