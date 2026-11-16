@@ -1,0 +1,40 @@
+name: Deploy Convex backend
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'convex/**'
+      - '.github/workflows/deploy-convex.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Check backend deployment access
+        id: access
+        run: |
+          if [ -z "$CONVEX_DEPLOY_KEY" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Convex deployment skipped: configure repository secret CONVEX_DEPLOY_KEY containing the production deployment key." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Deploy Convex functions
+        if: steps.access.outputs.ready == 'true'
+        run: npx convex deploy --yes
+      - name: Record deployment
+        if: steps.access.outputs.ready == 'true'
+        run: echo "Convex production functions deployed." >> "$GITHUB_STEP_SUMMARY"
