@@ -1,6 +1,7 @@
 import schema from "./schema";
 import { internal } from "./_generated/api";
 import { normalizePhone } from "../src/lib/format";
+import { shippingTotal } from "../src/store/totals";
 import { requireAdmin } from "./access";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -41,8 +42,6 @@ export const createCheckout = mutation({
       if (!Number.isSafeInteger(item.qty) || item.qty < 1 || !Number.isSafeInteger(item.number)) throw new Error("Invalid product quantity");
       quantities.set(item.number,(quantities.get(item.number) ?? 0)+item.qty);
     }
-    const shippingFee = settings?.shipping ?? 65;
-
     // Validate stock and gather product snapshots
     const lines = [];
     let subtotal = 0;
@@ -82,8 +81,8 @@ export const createCheckout = mutation({
       discount = Math.max(discount, Math.round((subtotal * sale.percentOff) / 100));
     }
 
-    const shipping =
-      settings?.freeShipping && subtotal >= 800 ? 0 : shippingFee;
+    // Use the same configurable delivery calculation as the cart and checkout UI.
+    const shipping = shippingTotal(subtotal, settings ?? undefined);
     const total = Math.max(0, subtotal + shipping - discount);
 
     const max = await ctx.db
