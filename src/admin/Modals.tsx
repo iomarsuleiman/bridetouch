@@ -380,7 +380,6 @@ function ShippingModal({
             min={0}
             value={min}
             onChange={setMin}
-            disabled={!freeShipping}
           />
           <p className="form-help">
             The store uses one delivery fee for all supported addresses.
