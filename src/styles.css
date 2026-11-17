@@ -286,3 +286,5 @@
   .option-add-value>input{flex-basis:100%}
   .option-add-value>.btn{width:100%}
 }
+
+.old-price{color:#98a398;text-decoration:line-through;font-size:.7em;font-weight:500;margin-right:5px}
