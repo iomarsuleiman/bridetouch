@@ -1,7 +1,7 @@
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useEffect } from "react";
-import { Show, SignInButton } from "@clerk/react";
+import { Show, SignInButton, SignOutButton } from "@clerk/react";
 import { useHashRoute } from "./hooks/useHashRoute";
 import { Icon } from "./components/Icon";
 import Storefront from "./store/Storefront";
@@ -75,6 +75,32 @@ function SignInPrompt() {
 function AdminAccess({view}:{view:string}) {
   const allowed = useQuery(api.access.current);
   if (allowed === undefined) return <div className="empty">Checking access?</div>;
-  if (!allowed) return <div className="empty"><h3>Administrator access required</h3><p>This account does not have permission to manage the store.</p></div>;
+  if (!allowed) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          padding: 24,
+          background: "#f8f9f6",
+        }}
+      >
+        <div style={{ textAlign: "center", maxWidth: 360 }}>
+          <h1 style={{ fontFamily: "Fraunces, Georgia, serif", fontWeight: 500, margin: "0 0 8px" }}>
+            Administrator access required
+          </h1>
+          <p style={{ color: "#888d85", margin: "0 0 20px" }}>
+            This account cannot manage the store. Sign out to use an administrator account.
+          </p>
+          <SignOutButton redirectUrl="/admin">
+            <button type="button" className="btn primary" style={{ padding: "12px 22px" }}>
+              Sign out
+            </button>
+          </SignOutButton>
+        </div>
+      </div>
+    );
+  }
   return <AdminApp view={view} />;
 }
