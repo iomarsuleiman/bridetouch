@@ -3,10 +3,23 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import schema from "./schema";
 
+const settingsReturn = v.union(v.null(), v.object({ ...schema.tables.settings.validator.fields, _id: v.id("settings"), _creationTime: v.number() }));
+
+// The storefront only receives public settings, never the administrator roster.
 export const get = query({
   args: {},
-  returns: v.union(v.null(), v.object({ ...schema.tables.settings.validator.fields, _id: v.id("settings"), _creationTime: v.number() })),
+  returns: settingsReturn,
   handler: async (ctx) => {
+    const settings = await ctx.db.query("settings").first();
+    return settings ? { ...settings, adminEmails: [] } : null;
+  },
+});
+
+export const getForAdmin = query({
+  args: {},
+  returns: settingsReturn,
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
     return await ctx.db.query("settings").first();
   },
 });
@@ -52,12 +65,17 @@ export const update = mutation({
       const host = new URL(social.url).hostname.replace(/^www\./, "");
       if (!SOCIAL_HOSTS[social.network].some((allowed) => host === allowed || host.endsWith("." + allowed))) throw new Error(`Use a ${social.network} link`);
     }
-    if (fields.adminEmails && fields.adminEmails.some(email => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw new Error("Use valid administrator emails");
+    if (fields.adminEmails !== undefined) {
+      const normalized = [...new Set(fields.adminEmails.map((email) => email.trim().toLowerCase()))];
+      if (!normalized.length) throw new Error("Keep at least one administrator");
+      if (normalized.some((email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw new Error("Use valid administrator emails");
+      fields.adminEmails = normalized;
+    }
     if (fields.shipping !== undefined && (!Number.isFinite(fields.shipping) || fields.shipping < 0)) throw new Error("Delivery fee must be zero or greater");
     if (fields.freeShippingMin !== undefined && (!Number.isFinite(fields.freeShippingMin) || fields.freeShippingMin < 0)) throw new Error("Free delivery threshold must be zero or greater");
-    if (fields.adminEmails?.length) {
+    if (fields.adminEmails) {
       const identity = await ctx.auth.getUserIdentity();
-      if (!fields.adminEmails.some(email=>email.toLowerCase() === identity?.email?.toLowerCase())) throw new Error("Keep your own email in the administrator list");
+      if (!fields.adminEmails.includes(identity?.email?.trim().toLowerCase() ?? "")) throw new Error("Keep your own email in the administrator list");
     }
     const existing = await ctx.db.query("settings").first();
     if (!existing) {
