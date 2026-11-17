@@ -119,7 +119,6 @@ export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
               );
             })}
           </div>
-        </section>
       </section>
     </>
   );
