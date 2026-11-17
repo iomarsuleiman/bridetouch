@@ -62,7 +62,7 @@ export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
       {ctx.collections.length ? (
         <div className="card-list">
           {ctx.collections.map((collection) => {
-            const count = ctx.products.filter((product) => collection.productNumbers?.includes(product.number)).length;
+            const count = ctx.products.filter((product) => collection.productNumbers?.includes(product.number) || (!collection.productNumbers?.length && product.category === collection.name)).length;
             return (
               <article key={collection._id} className="collection-card">
                 {collection.image ? <img src={collection.image} alt={collection.name} loading="lazy" /> : <div className="collection-image-placeholder" aria-hidden="true"><Icon name="grid" /></div>}
