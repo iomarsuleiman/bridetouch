@@ -7,14 +7,17 @@ import {
   type ReactNode,
 } from "react";
 
-export type CartItem = { number: number; qty: number; color?: string };
+import { variantKey } from "../store/productVariants";
+export type CartItem = { number: number; qty: number; color?: string; variant?: string[] };
+export const cartItemKey = (item: Pick<CartItem, "number" | "variant">) =>
+  `${item.number}:${variantKey(item.variant)}`;
 
 type CartContext = {
   items: CartItem[];
   count: number;
   add: (item: CartItem) => void;
-  setQty: (number: number, qty: number) => void;
-  remove: (number: number) => void;
+  setQty: (number: number, qty: number, variant?: string[]) => void;
+  remove: (number: number, variant?: string[]) => void;
   clear: () => void;
 };
 
@@ -48,26 +51,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const add = useCallback((item: CartItem) => {
     setItems((prev) => {
-      const found = prev.find((i) => i.number === item.number);
+      const found = prev.find((i) => cartItemKey(i) === cartItemKey(item));
       if (found) {
         return prev.map((i) =>
-          i.number === item.number ? { ...i, qty: i.qty + item.qty } : i,
+          cartItemKey(i) === cartItemKey(item) ? { ...i, qty: i.qty + item.qty } : i,
         );
       }
       return [...prev, item];
     });
   }, []);
 
-  const setQty = useCallback((number: number, qty: number) => {
+  const setQty = useCallback((number: number, qty: number, variant?: string[]) => {
+    const key = cartItemKey({ number, variant });
     setItems((prev) =>
       qty <= 0
-        ? prev.filter((i) => i.number !== number)
-        : prev.map((i) => (i.number === number ? { ...i, qty } : i)),
+        ? prev.filter((i) => cartItemKey(i) !== key)
+        : prev.map((i) => (cartItemKey(i) === key ? { ...i, qty } : i)),
     );
   }, []);
 
-  const remove = useCallback((number: number) => {
-    setItems((prev) => prev.filter((i) => i.number !== number));
+  const remove = useCallback((number: number, variant?: string[]) => {
+    const key = cartItemKey({ number, variant });
+    setItems((prev) => prev.filter((i) => cartItemKey(i) !== key));
   }, []);
 
   const clear = useCallback(() => setItems([]), []);
