@@ -77,6 +77,13 @@ export default function Storefront({ route }: { route: StoreRoute }) {
     window.setTimeout(() => document.querySelector<HTMLInputElement>("#catalog-search")?.focus(), 100);
   };
 
+  const socialLinks = (settings?.socials ?? []).filter((social) => social.enabled && social.url.trim());
+  // Existing stores may have a legacy Instagram URL, before configurable socials.
+  if (!socialLinks.length && settings?.instagramUrl) {
+    socialLinks.push({ network: "instagram", url: settings.instagramUrl, enabled: true });
+  }
+  const socialLabel = (network: string) => ({ instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok" })[network as "instagram" | "facebook" | "tiktok"] ?? network;
+
   const ui: StoreUI = {
     openCart: () => setCartOpen(true),
     closeCart: () => setCartOpen(false),
@@ -166,11 +173,29 @@ export default function Storefront({ route }: { route: StoreRoute }) {
                 Shop all
               </button>
               {(settings?.navigation ?? [...new Set((products ?? []).map(product => product.category))].slice(0,2)).map(name => <button key={name} className={route.view === "catalog" && storeCategory === name ? "active" : ""} onClick={() => goToCategory(name)}>{name}</button>)}
-              {settings?.instagramUrl ? <a href={settings.instagramUrl} target="_blank" rel="noopener noreferrer">Instagram</a> : null}
               {settings?.supportUrl ? <a href={settings.supportUrl}>Support</a> : null}
+              {socialLinks.length ? (
+                <div className="store-nav-social" aria-label="Social media">
+                  {socialLinks.map((social) => (
+                    <a key={social.network} href={social.url} target="_blank" rel="noopener noreferrer"
+                      aria-label={socialLabel(social.network)} title={socialLabel(social.network)}>
+                      <Icon name={social.network} size="sm" />
+                    </a>
+                  ))}
+                </div>
+              ) : null}
             </nav>
             <div className="header-actions">
-
+              {socialLinks.length ? (
+                <div className="header-social-links" aria-label="Social media">
+                  {socialLinks.map((social) => (
+                    <a key={social.network} href={social.url} target="_blank" rel="noopener noreferrer"
+                      aria-label={socialLabel(social.network)} title={socialLabel(social.network)}>
+                      <Icon name={social.network} size="sm" />
+                    </a>
+                  ))}
+                </div>
+              ) : null}
               <button
                 type="button"
                 className="btn icon-only ghost"
