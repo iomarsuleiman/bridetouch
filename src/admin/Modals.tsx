@@ -7,7 +7,7 @@ import { Badge } from "../components/Badge";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
 import { ImageUpload } from "./ImageUpload";
-import { money } from "../lib/format";
+import { money, formatOrderDate } from "../lib/format";
 import { navigate } from "../hooks/useHashRoute";
 import { Field } from "./shared";
 import { copyText, printOrder } from "./utils";
@@ -479,7 +479,7 @@ function OrderDetailModal({
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <Badge text={order.status} />
-        <span style={{ color: "#a4aca2", fontSize: 11 }}>{order.date}</span>
+        <span style={{ color: "#a4aca2", fontSize: 11 }}>{formatOrderDate(order.date)}</span>
       </div>
       <div className="detail-section">
         <h3>Items</h3>

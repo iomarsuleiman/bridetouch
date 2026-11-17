@@ -45,6 +45,9 @@ const ICON_PATHS: Record<string, string> = {
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 11v6M12 7h.01"/>',
   grid2: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
   percent: '<circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><path d="m4 20 16-16"/>',
+  instagram: '<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1"/>',
+  facebook: '<path d="M14 8h3V4h-3a4 4 0 0 0-4 4v3H7v3h3v7h3v-7h3l1-3h-4V9a1 1 0 0 1 1-1Z"/>',
+  tiktok: '<path d="M14 3v11a3.5 3.5 0 1 1-3.5-3.5"/><path d="M14 3c.4 3.2 2.3 5 5 5.4"/>',
 };
 
 export type IconSize = "sm" | "lg" | "xl" | "";

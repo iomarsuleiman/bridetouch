@@ -9,6 +9,8 @@
  */
 
 import type * as access from "../access.js";
+import type * as activity from "../activity.js";
+import type * as categories from "../categories.js";
 import type * as collections from "../collections.js";
 import type * as coupons from "../coupons.js";
 import type * as maintenance from "../maintenance.js";
@@ -18,6 +20,7 @@ import type * as products from "../products.js";
 import type * as push from "../push.js";
 import type * as pushDelivery from "../pushDelivery.js";
 import type * as sales from "../sales.js";
+import type * as seedDemo from "../seedDemo.js";
 import type * as seedSignatures from "../seedSignatures.js";
 import type * as settings from "../settings.js";
 
@@ -29,6 +32,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   access: typeof access;
+  activity: typeof activity;
+  categories: typeof categories;
   collections: typeof collections;
   coupons: typeof coupons;
   maintenance: typeof maintenance;
@@ -38,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   push: typeof push;
   pushDelivery: typeof pushDelivery;
   sales: typeof sales;
+  seedDemo: typeof seedDemo;
   seedSignatures: typeof seedSignatures;
   settings: typeof settings;
 }>;

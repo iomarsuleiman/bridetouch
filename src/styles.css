@@ -84,10 +84,10 @@
 @media(max-width:620px){.store-header .brand-logo{width:36px;height:36px}}
 
 /* Full-width storefront header. */
-.store-header{width:100%;max-width:none;margin:0;top:0;border:0;border-bottom:1px solid #e8e7df;border-radius:0;box-shadow:none;background:#faf9f5;padding:10px max(24px,5vw)}
+.store-header{width:100%;max-width:none;margin:0;top:0;border:0;border-bottom:1px solid #e8e7df;border-radius:0;box-shadow:0 6px 24px rgba(36,50,39,.04);background:rgba(250,249,245,.78);backdrop-filter:blur(16px) saturate(1.5);-webkit-backdrop-filter:blur(16px) saturate(1.5);padding:10px max(24px,5vw)}
 @media(max-width:900px){.store-header{width:100%;margin:0;top:0;border-radius:0;padding:8px 18px}.store-nav.open{top:100%;max-width:none;border-radius:0;margin:0;border-top:0}}
 
-.store-header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;isolation:isolate;backdrop-filter:none;-webkit-backdrop-filter:none;z-index:80}
+.store-header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;isolation:isolate;z-index:80}
 .store-header .store-nav{justify-self:center}
 .store-nav a{font-size:13px;font-weight:600;color:#62665d;padding:10px 0}
 .store-nav a:hover{color:#233f30}
@@ -117,3 +117,49 @@
 
 @media(max-width:900px){.store-header{grid-template-columns:36px minmax(0,1fr) auto;gap:10px}.store-header>.store-mobile-menu{width:36px;height:40px;padding:8px}.store-header .brand{width:auto;max-width:100%;min-width:0;gap:7px}.store-header .brand-word{font-size:21px}.store-header .brand-logo{width:34px;height:34px}.store-header .header-actions{gap:6px}}
 @media(max-width:380px){.store-header{gap:6px;padding-left:12px;padding-right:12px}.store-header .brand-word{font-size:19px}.store-header .header-actions{gap:2px}}
+
+/* Settings: inline free-delivery threshold */
+.setting-inline{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.setting-inline input{width:74px;padding:4px 8px;border:1px solid #e3e8e1;border-radius:8px;background:#fff;font:inherit;font-weight:750;font-size:12px;color:#365641;text-align:center}
+.setting-inline input:focus{outline:none;border-color:#9db8a2;box-shadow:0 0 0 3px #50775a1f}
+.setting-inline input:disabled{background:#f6f7f4;color:#a7aea6}
+.setting-inline input::-webkit-outer-spin-button,.setting-inline input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.setting-inline input[type=number]{-moz-appearance:textfield;appearance:textfield}
+
+/* Settings: image preview and administrator list */
+.image-preview{display:grid;place-items:center;padding:12px;background:#faf9f4;border:1px solid #ece9de;border-radius:12px;margin-bottom:8px}
+.image-preview img{display:block;max-width:100%;max-height:170px;object-fit:contain;border-radius:8px}
+.admin-field .form-help{margin:0 0 10px}
+.admin-list{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:8px}
+.admin-list li{display:flex;align-items:center;gap:10px;border:1px solid #ecefe9;border-radius:11px;padding:8px 10px;background:#fbfcfa}
+.admin-avatar{width:30px;height:30px;flex:none;border-radius:50%;background:#e7efe4;color:#4b7055;display:grid;place-items:center;font-weight:750;font-size:12px}
+.admin-address{flex:1;min-width:0;font-size:12px;color:#4a554b;overflow-wrap:anywhere}
+.admin-address em{font-style:normal;color:#9aa39a}
+.admin-add{display:flex;gap:8px}
+.admin-add input{flex:1;min-width:0}
+.admin-add .btn{flex:none;white-space:nowrap}
+@media(max-width:600px){.admin-add{flex-wrap:wrap}.admin-add .btn{width:100%;justify-content:center}}
+
+/* Footer social icons (built in, styled as small round buttons). */
+.footer-social{display:flex;gap:8px;align-items:center}
+.footer-social a{width:34px;height:34px;display:grid;place-items:center;border:1px solid #e6e3d9;border-radius:50%;color:#6c7a6c;background:#fbfaf6;transition:background .18s,color .18s,transform .18s}
+.footer-social a:hover{background:#edf1e8;color:#3f5c46;transform:translateY(-1px)}
+.footer-social .icon{width:16px;height:16px}
+
+/* Settings: footer social links card. */
+.social-row{gap:10px}
+.social-label{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:650;min-width:112px}
+.social-badge{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#eef3ea;color:#4f6d57;flex:none}
+.social-url{flex:1;min-width:0;padding:8px 10px;border:1px solid #e3e8e1;border-radius:9px;background:#fff;font-size:12px}
+.social-url:disabled{background:#f5f6f2;color:#a9afa6}
+.banner-clock{font-variant-numeric:tabular-nums;letter-spacing:.02em}
+@media(max-width:600px){.setting-row.social-row{flex-wrap:wrap}.social-row .social-url{order:3;flex-basis:100%}}
+
+/* Frosted storefront nav. Kept in its own @supports block so the CSS
+   minifier cannot collapse the unprefixed property away. */
+@supports (backdrop-filter: blur(1px)) {
+  .store-header {
+    -webkit-backdrop-filter: blur(16px) saturate(1.5);
+    backdrop-filter: blur(16px) saturate(1.5);
+  }
+}

@@ -1,7 +1,7 @@
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { Badge } from "../components/Badge";
 import { Icon } from "../components/Icon";
-import { money } from "../lib/format";
+import { money, formatOrderDate } from "../lib/format";
 
 // Port of the vanilla tableOrders() — table on desktop, cards on mobile.
 export function OrdersTable({
@@ -41,7 +41,7 @@ export function OrdersTable({
                     {o.customer}
                   </div>
                 </td>
-                <td>{o.date}</td>
+                <td>{formatOrderDate(o.date)}</td>
                 <td style={{ color: "#415b46", fontWeight: 750 }}>{money(o.total)}</td>
                 <td>
                   <Badge text={o.status} />
@@ -76,7 +76,7 @@ export function OrdersTable({
               <strong>
                 #ML-{o.number} · {o.customer}
               </strong>
-              <small>{o.date}</small>
+              <small>{formatOrderDate(o.date)}</small>
             </span>
             <span className="right">
               <strong>{money(o.total)}</strong>

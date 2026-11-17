@@ -17,6 +17,7 @@ export const update = mutation({
     logoImage: v.optional(v.string()),
     instagramUrl: v.optional(v.string()),
     supportUrl: v.optional(v.string()),
+    socials: v.optional(v.array(v.object({ network: v.string(), url: v.string(), enabled: v.boolean() }))),
     adminEmails: v.optional(v.array(v.string())),
     heroTitle: v.optional(v.string()),
     heroDescription: v.optional(v.string()),
@@ -43,6 +44,14 @@ export const update = mutation({
       if (url && !/^(https:\/\/|mailto:|tel:)/i.test(url)) throw new Error("Use an HTTPS, email or telephone link");
     }
     if (fields.instagramUrl && new URL(fields.instagramUrl).hostname.replace(/^www\./, "") !== "instagram.com") throw new Error("Use an instagram.com page URL");
+    const SOCIAL_HOSTS: Record<string, string[]> = { instagram: ["instagram.com"], facebook: ["facebook.com", "fb.com"], tiktok: ["tiktok.com"] };
+    for (const social of fields.socials ?? []) {
+      if (!SOCIAL_HOSTS[social.network]) throw new Error("Unknown social network");
+      if (!social.url.trim()) continue;
+      if (!/^https:\/\//i.test(social.url)) throw new Error("Social links must start with https://");
+      const host = new URL(social.url).hostname.replace(/^www\./, "");
+      if (!SOCIAL_HOSTS[social.network].some((allowed) => host === allowed || host.endsWith("." + allowed))) throw new Error(`Use a ${social.network} link`);
+    }
     if (fields.adminEmails && fields.adminEmails.some(email => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw new Error("Use valid administrator emails");
     if (fields.shipping !== undefined && (!Number.isFinite(fields.shipping) || fields.shipping < 0)) throw new Error("Delivery fee must be zero or greater");
     if (fields.freeShippingMin !== undefined && (!Number.isFinite(fields.freeShippingMin) || fields.freeShippingMin < 0)) throw new Error("Free delivery threshold must be zero or greater");

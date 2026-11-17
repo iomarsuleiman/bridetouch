@@ -10,9 +10,10 @@ function countdown(ms: number) {
   const d = Math.floor(total / 86400);
   const h = Math.floor((total % 86400) / 3600);
   const m = Math.floor((total % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h left`;
-  if (h > 0) return `${h}h ${m}m left`;
-  return `${m}m left`;
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const clock = `${pad(h)}:${pad(m)}:${pad(s)}`;
+  return d > 0 ? `${d}d ${clock}` : clock;
 }
 
 // The top banner now promotes sales, discounts and timed offers.
@@ -25,7 +26,7 @@ export function PromoBanner() {
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 60_000);
+    const t = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(t);
   }, []);
 
@@ -34,7 +35,7 @@ export function PromoBanner() {
       <div className="demo-banner">
         <Icon name="sparkle" size="sm" />
         {sale.name} · {sale.percentOff}% off everything applied at checkout
-        <span className="light">· {countdown(sale.endsAt - now)}</span>
+        <span className="light banner-clock">· {countdown(sale.endsAt - now)} left</span>
         <button type="button" onClick={() => goToCategory("All")}>
           Shop the sale <Icon name="arrow" size="sm" />
         </button>

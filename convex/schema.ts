@@ -12,13 +12,24 @@ export default defineSchema({
     img: v.optional(v.string()),
     tag: v.optional(v.string()),
     color: v.optional(v.string()),
+    // Any number of options (Color, Size, Material…) and one row per
+    // combination with its own stock. `values` is aligned with `options`.
+    options: v.optional(v.array(v.object({ name: v.string(), values: v.array(v.string()) }))),
+    variants: v.optional(v.array(v.object({ values: v.array(v.string()), stock: v.number(), price: v.optional(v.number()) }))),
   }).index("by_number", ["number"]),
+  categories: defineTable({
+    name: v.string(),
+    position: v.number(),
+  })
+    .index("by_name", ["name"])
+    .index("by_position", ["position"]),
   orders: defineTable({
     number: v.number(), // display id, e.g. 1028
     customer: v.string(),
     phone: v.string(),
     date: v.string(),
-    items: v.array(v.object({ number: v.number(), qty: v.number(), name: v.optional(v.string()), price: v.optional(v.number()) })),
+    placedAt: v.optional(v.number()),
+    items: v.array(v.object({ number: v.number(), qty: v.number(), name: v.optional(v.string()), price: v.optional(v.number()), variant: v.optional(v.string()) })),
     subtotal: v.optional(v.number()),
     shippingFee: v.optional(v.number()),
     discount: v.optional(v.number()),
@@ -47,14 +58,25 @@ export default defineSchema({
     active: v.boolean(),
   }),
   // Timed sales: a percentage discount that applies automatically during
-  // [startsAt, endsAt] (epoch ms). The best active one is applied at checkout.
+  // [startsAt, endsAt] (epoch ms). Scope narrows it to chosen products or
+  // collections; omitted scope means the whole store.
   sales: defineTable({
     name: v.string(),
     percentOff: v.number(),
     startsAt: v.number(),
     endsAt: v.number(),
     active: v.boolean(),
+    scope: v.optional(v.string()), // "all" | "products" | "collections"
+    productNumbers: v.optional(v.array(v.number())),
+    collectionNames: v.optional(v.array(v.string())),
   }),
+  // Audit trail for store changes (currently sales and categories).
+  activity: defineTable({
+    at: v.number(),
+    kind: v.string(),
+    message: v.string(),
+    actor: v.optional(v.string()),
+  }).index("by_at", ["at"]),
   collections: defineTable({
     name: v.string(),
     image: v.string(),
@@ -67,6 +89,7 @@ export default defineSchema({
     logoImage: v.optional(v.string()),
     instagramUrl: v.optional(v.string()),
     supportUrl: v.optional(v.string()),
+    socials: v.optional(v.array(v.object({ network: v.string(), url: v.string(), enabled: v.boolean() }))),
     adminEmails: v.optional(v.array(v.string())),
     heroTitle: v.optional(v.string()),
     heroDescription: v.optional(v.string()),

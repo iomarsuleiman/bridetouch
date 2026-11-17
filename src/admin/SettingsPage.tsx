@@ -1,6 +1,7 @@
 import { NotificationSetup } from "../components/NotificationSetup";
 import { useRef, useState } from "react";
 import { useMutation } from "convex/react";
+import { useUser } from "@clerk/react";
 import { api } from "../../convex/_generated/api";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
@@ -15,6 +16,14 @@ const TOGGLES: { key: "freeShipping" | "notifications" | "guestCheckout"; title:
   { key: "guestCheckout", title: () => "Guest checkout", desc: "Customers do not need an account" },
 ];
 
+const SOCIAL_NETWORKS = [
+  { network: "instagram", label: "Instagram", placeholder: "https://www.instagram.com/your-page" },
+  { network: "facebook", label: "Facebook", placeholder: "https://www.facebook.com/your-page" },
+  { network: "tiktok", label: "TikTok", placeholder: "https://www.tiktok.com/@your-page" },
+] as const;
+
+type SocialLink = { network: string; url: string; enabled: boolean };
+
 // Port of the vanilla settingsPage() (without the reset-demo button).
 export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
@@ -22,9 +31,20 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
   const s = ctx.settings;
   const [storeName, setStoreName] = useState(s.storeName);
   const [email, setEmail] = useState(s.email);
-  const [instagramUrl, setInstagramUrl] = useState(s.instagramUrl ?? "");
   const [supportUrl, setSupportUrl] = useState(s.supportUrl ?? "");
-  const [adminEmails, setAdminEmails] = useState((s.adminEmails ?? []).join(", "));
+  const [socials, setSocials] = useState<SocialLink[]>(() => {
+    const existing = s.socials ?? [];
+    return SOCIAL_NETWORKS.map(({ network }) => {
+      const found = existing.find((entry) => entry.network === network);
+      if (found) return { ...found };
+      const legacy = network === "instagram" ? (s.instagramUrl ?? "") : "";
+      return { network, url: legacy, enabled: Boolean(legacy) };
+    });
+  });
+  const [adminEmails, setAdminEmails] = useState<string[]>(s.adminEmails ?? []);
+  const [newAdmin, setNewAdmin] = useState("");
+  const { user } = useUser();
+  const myEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
   const [city, setCity] = useState(s.city);
   const [shippingFee, setShippingFee] = useState(String(s.shipping ?? 65));
   const [freeShippingMin, setFreeShippingMin] = useState(String(s.freeShippingMin ?? 800));
@@ -39,11 +59,59 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
       return;
     }
     try {
-      await update({ storeName, email, city, shipping: Number(shippingFee), freeShippingMin: Number(freeShippingMin), ...content, instagramUrl, supportUrl, adminEmails:adminEmails.split(",").map(email => email.trim()).filter(Boolean), navigation: navigation.split(",").map(n => n.trim()).filter(Boolean) });
+      const instagramUrl = (socials.find((entry) => entry.network === "instagram")?.url ?? "").trim();
+      await update({ storeName, email, city, shipping: Number(shippingFee), freeShippingMin: Number(freeShippingMin), ...content, instagramUrl, socials: socials.map((entry) => ({ ...entry, url: entry.url.trim() })), supportUrl, adminEmails, navigation: navigation.split(",").map(n => n.trim()).filter(Boolean) });
       toast("Settings saved");
     } catch {
       toast("Could not save settings");
     }
+  }
+
+  // The inline value in the toggle row saves on its own, so the threshold can
+  // be changed without touching the rest of the form.
+  async function saveThreshold() {
+    const value = Number(freeShippingMin);
+    if (!Number.isFinite(value) || value < 0) {
+      setFreeShippingMin(String(s.freeShippingMin ?? 800));
+      return;
+    }
+    if (value === (s.freeShippingMin ?? 800)) return;
+    try {
+      await update({ freeShippingMin: value });
+      toast("Free delivery threshold updated");
+    } catch {
+      toast("Could not update the threshold");
+      setFreeShippingMin(String(s.freeShippingMin ?? 800));
+    }
+  }
+
+  function addAdmin() {
+    const address = newAdmin.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+      toast("Enter a valid email address");
+      return;
+    }
+    if (adminEmails.includes(address)) {
+      toast("That email is already an administrator");
+      setNewAdmin("");
+      return;
+    }
+    // The backend requires the signed-in admin to stay in a restricted list,
+    // so adding the first person also adds you.
+    setAdminEmails((current) => (current.length === 0 && myEmail && myEmail !== address ? [myEmail, address] : [...current, address]));
+    setNewAdmin("");
+  }
+
+  function removeAdmin(address: string) {
+    if (address === myEmail && adminEmails.length > 1) {
+      toast("Keep your own email in the administrator list");
+      return;
+    }
+    setAdminEmails((current) => current.filter((entry) => entry !== address));
+  }
+
+  function updateSocial(network: string, patch: Partial<SocialLink>) {
+    setSocials((current) => current.map((entry) => (entry.network === network ? { ...entry, ...patch } : entry)));
   }
 
   return (
@@ -76,15 +144,101 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
         </section>
         <section className="settings-card">
           <h2>Links & access</h2>
-          <div className="field"><label htmlFor="instagram">Instagram page</label><input id="instagram" type="url" placeholder="https://www.instagram.com/your-page" value={instagramUrl} onChange={e => setInstagramUrl(e.target.value)} /></div>
           <div className="field"><label htmlFor="support">Support link</label><input id="support" placeholder="https://wa.me/? or mailto:you@example.com" value={supportUrl} onChange={e => setSupportUrl(e.target.value)} /></div>
-          <div className="field"><label htmlFor="admins">Administrator emails, separated by commas</label><input id="admins" value={adminEmails} onChange={e => setAdminEmails(e.target.value)} /><small>Leave blank to allow all signed-in users. Add emails to restrict access. Keep your own email in a restricted list.</small></div>
+          <div className="field admin-field">
+            <label>Dashboard administrators</label>
+            <p className="form-help">
+              {adminEmails.length
+                ? "Only these people can open the dashboard."
+                : "Anyone who signs in can open the dashboard. Add an email to restrict access."}
+            </p>
+            {adminEmails.length ? (
+              <ul className="admin-list">
+                {adminEmails.map((address) => (
+                  <li key={address}>
+                    <span className="admin-avatar">{(address[0] || "?").toUpperCase()}</span>
+                    <span className="admin-address">
+                      {address}
+                      {address === myEmail ? <em> · you</em> : null}
+                    </span>
+                    <button
+                      type="button"
+                      className="row-action"
+                      aria-label={`Remove ${address}`}
+                      title="Remove administrator"
+                      onClick={() => removeAdmin(address)}
+                    >
+                      <Icon name="trash" size="sm" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="admin-add">
+              <input
+                id="newAdmin"
+                type="email"
+                placeholder="name@example.com"
+                value={newAdmin}
+                onChange={(e) => setNewAdmin(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addAdmin();
+                  }
+                }}
+              />
+              <button type="button" className="btn secondary" onClick={addAdmin}>
+                <Icon name="plus" size="sm" /> Add
+              </button>
+            </div>
+            <small>Removing an email removes that person's access when you save. Keep your own email if the list is not empty.</small>
+          </div>
           <h2>Storefront & header</h2>
           <p>Header links match product categories or collection names. Leave blank to hide them.</p>
           <div className="field"><label htmlFor="navigation">Header links, separated by commas</label><input id="navigation" value={navigation} onChange={e => setNavigation(e.target.value)} /></div>
           {Object.entries(content).map(([key, value]) => {
             const label = key.replace(/([A-Z])/g, " $1");
             return key.endsWith("Image") ? <ImageUpload key={key} label={label} value={value} onChange={url => setContent(current => ({...current, [key]:url}))} /> : <div className="field" key={key}><label htmlFor={key}>{label}</label><input id={key} value={value} onChange={e => setContent(current => ({...current, [key]:e.target.value}))} /></div>;
+          })}
+        </section>
+        <section className="settings-card">
+          <h2>Footer social links</h2>
+          <p>
+            Instagram, Facebook and TikTok icons are built in — no logos to upload. Turn one on, paste the link and save.
+            Leave it off to hide it from the footer. Your email is set under Store details.
+          </p>
+          {SOCIAL_NETWORKS.map(({ network, label, placeholder }) => {
+            const social = socials.find((entry) => entry.network === network);
+            if (!social) return null;
+            return (
+              <div key={network} className="setting-row social-row">
+                <span className="social-label">
+                  <span className="social-badge"><Icon name={network} size="sm" /></span>
+                  {label}
+                </span>
+                <input
+                  className="social-url"
+                  type="url"
+                  inputMode="url"
+                  placeholder={placeholder}
+                  aria-label={`${label} link`}
+                  value={social.url}
+                  disabled={!social.enabled}
+                  onChange={(e) => updateSocial(network, { url: e.target.value })}
+                />
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={social.enabled}
+                  aria-label={`Show ${label} in the footer`}
+                  className={"toggle" + (social.enabled ? " on" : "")}
+                  onClick={() => updateSocial(network, { enabled: !social.enabled })}
+                >
+                  <i />
+                </button>
+              </div>
+            );
           })}
         </section>
         <section className="settings-card">
@@ -103,7 +257,30 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
           {TOGGLES.map((t) => (
             <div key={t.key} className="setting-row">
               <span>
-                <strong>{t.title(s.freeShippingMin)}</strong>
+                {t.key === "freeShipping" ? (
+                  <strong className="setting-inline">
+                    Free delivery from EGP
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      inputMode="numeric"
+                      value={freeShippingMin}
+                      disabled={!s.freeShipping}
+                      onChange={(e) => setFreeShippingMin(e.target.value)}
+                      onBlur={saveThreshold}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      aria-label="Free delivery threshold in EGP"
+                    />
+                  </strong>
+                ) : (
+                  <strong>{t.title(s.freeShippingMin)}</strong>
+                )}
                 <small>{t.desc}</small>
               </span>
               <button

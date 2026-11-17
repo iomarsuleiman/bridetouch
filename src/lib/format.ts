@@ -21,3 +21,12 @@ export function statusVariant(
   if (v === "Shipped") return "blue";
   return "gray";
 }
+
+// Orders store an ISO timestamp; show it as a friendly date. Legacy plain
+// strings ("Yesterday", "Nov 13, 2026") pass through unchanged.
+export function formatOrderDate(value: string) {
+  if (!value.includes("T")) return value;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}

@@ -60,11 +60,9 @@ export function ImageUpload({
     <div className="field">
       <label>{label}</label>
       {value ? (
-        <img
-          src={value}
-          alt=""
-          style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 11, marginBottom: 8 }}
-        />
+        <div className="image-preview">
+          <img src={value} alt="" />
+        </div>
       ) : null}
       <div style={{ display: "flex", gap: 8 }}>
         <input

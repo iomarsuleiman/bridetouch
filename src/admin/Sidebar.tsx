@@ -74,7 +74,7 @@ export function Sidebar({
                 >
                   <Icon name={item.icon} />
                   <span>{item.label}</span>
-                  {item.view === "orders" ? <span className="nav-count">{newOrders}</span> : null}
+                  {item.view === "orders" && newOrders > 0 ? <span className="nav-count">{newOrders}</span> : null}
                 </button>
               );
             })}
