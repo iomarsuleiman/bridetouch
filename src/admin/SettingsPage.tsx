@@ -1,6 +1,6 @@
 import { NotificationSetup } from "../components/NotificationSetup";
-import { useRef, useState } from "react";
-import { useMutation } from "convex/react";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { useUser } from "@clerk/react";
 import { api } from "../../convex/_generated/api";
 import { Icon } from "../components/Icon";
@@ -41,7 +41,13 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
       return { network, url: legacy, enabled: Boolean(legacy) };
     });
   });
+  const authorizedAdmins = useQuery(api.access.roster);
   const [adminEmails, setAdminEmails] = useState<string[]>(s.adminEmails ?? []);
+  // During a one-time owner migration the effective roster comes from Convex env
+  // until an authorized admin saves it in the store's settings.
+  useEffect(() => {
+    if (!s.adminEmails?.length && authorizedAdmins) setAdminEmails(authorizedAdmins);
+  }, [s.adminEmails, authorizedAdmins]);
   const [newAdmin, setNewAdmin] = useState("");
   const { user } = useUser();
   const myEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
@@ -49,7 +55,7 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
   const [shippingFee, setShippingFee] = useState(String(s.shipping ?? 65));
   const [freeShippingMin, setFreeShippingMin] = useState(String(s.freeShippingMin ?? 800));
   const [content, setContent] = useState({logoImage:s.logoImage || DEFAULT_LOGO,heroTitle:s.heroTitle ?? "A little something, made by hand.",heroDescription:s.heroDescription ?? "Ceramics, little keepsakes and everyday favorites. Each piece has its own kind of charm.",heroImage:s.heroImage ?? "",storyTitle:s.storyTitle ?? "Good things take a little time.",storyDescription:s.storyDescription ?? "Thoughtfully made pieces for the quiet, colorful moments in everyday life.",storyImage:s.storyImage ?? "",catalogTitle:s.catalogTitle ?? "Handmade, for you.",catalogDescription:s.catalogDescription ?? "Every piece is a little different. That is the lovely part.",announcement:s.announcement ?? ""});
-  const [navigation, setNavigation] = useState((s.navigation ?? [...new Set(ctx.products.map(p => p.category))].slice(0,2)).join(", "));
+  const [navigation, setNavigation] = useState<string[]>(() => s.navigation ?? [...new Set(ctx.products.map((p) => p.category))].slice(0, 2));
   const formRef = useRef<HTMLFormElement>(null);
 
   async function save() {
@@ -60,7 +66,7 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
     }
     try {
       const instagramUrl = (socials.find((entry) => entry.network === "instagram")?.url ?? "").trim();
-      await update({ storeName, email, city, shipping: Number(shippingFee), freeShippingMin: Number(freeShippingMin), ...content, instagramUrl, socials: socials.map((entry) => ({ ...entry, url: entry.url.trim() })), supportUrl, adminEmails, navigation: navigation.split(",").map(n => n.trim()).filter(Boolean) });
+      await update({ storeName, email, city, shipping: Number(shippingFee), freeShippingMin: Number(freeShippingMin), ...content, instagramUrl, socials: socials.map((entry) => ({ ...entry, url: entry.url.trim() })), supportUrl, adminEmails, navigation: [...new Set(navigation.map((name) => name.trim()).filter(Boolean))] });
       toast("Settings saved");
     } catch {
       toast("Could not save settings");
@@ -110,6 +116,16 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
     setAdminEmails((current) => current.filter((entry) => entry !== address));
   }
 
+  function moveLink(index: number, offset: number) {
+    setNavigation((current) => {
+      const next = [...current];
+      const destination = index + offset;
+      if (destination < 0 || destination >= next.length) return current;
+      [next[index], next[destination]] = [next[destination], next[index]];
+      return next;
+    });
+  }
+
   function updateSocial(network: string, patch: Partial<SocialLink>) {
     setSocials((current) => current.map((entry) => (entry.network === network ? { ...entry, ...patch } : entry)));
   }
@@ -148,9 +164,7 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
           <div className="field admin-field">
             <label>Dashboard administrators</label>
             <p className="form-help">
-              {adminEmails.length
-                ? "Only these people can open the dashboard."
-                : "Anyone who signs in can open the dashboard. Add an email to restrict access."}
+              Only the listed accounts may access the dashboard. A new sign-up never grants access.
             </p>
             {adminEmails.length ? (
               <ul className="admin-list">
@@ -192,21 +206,45 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
                 <Icon name="plus" size="sm" /> Add
               </button>
             </div>
-            <small>Removing an email removes that person's access when you save. Keep your own email if the list is not empty.</small>
+            <small>Only existing administrators can edit this list. Keep your own account listed. Changes apply when saved.</small>
           </div>
           <h2>Storefront & header</h2>
-          <p>Header links match product categories or collection names. Leave blank to hide them.</p>
-          <div className="field"><label htmlFor="navigation">Header links, separated by commas</label><input id="navigation" value={navigation} onChange={e => setNavigation(e.target.value)} /></div>
+          <p>Choose the categories and collections shown in the storefront navigation. Drag-free controls let you reorder them.</p>
+          <div className="field">
+            <label id="header-links-heading">Header links</label>
+            <div className="header-link-list" role="list" aria-labelledby="header-links-heading">
+              {navigation.map((name, index) => (
+                <div className="header-link-item" role="listitem" key={index}>
+                  <span className="header-link-number" aria-hidden="true">{index + 1}</span>
+                  <input
+                    aria-label={`Header link ${index + 1}`}
+                    placeholder="Category or collection"
+                    value={name}
+                    maxLength={70}
+                    onChange={(e) => setNavigation((current) => current.map((value, i) => i === index ? e.target.value : value))}
+                  />
+                  <div className="header-link-actions">
+                    <button type="button" aria-label={`Move link ${index + 1} up`} title="Move up" disabled={index === 0} onClick={() => moveLink(index, -1)}>↑</button>
+                    <button type="button" aria-label={`Move link ${index + 1} down`} title="Move down" disabled={index === navigation.length - 1} onClick={() => moveLink(index, 1)}>↓</button>
+                    <button type="button" aria-label={`Remove link ${index + 1}`} title="Remove link" onClick={() => setNavigation((current) => current.filter((_, i) => i !== index))}>×</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button type="button" className="btn secondary header-link-add" onClick={() => setNavigation((current) => [...current, ""])}>
+              <Icon name="plus" size="sm" /> Add link
+            </button>
+          </div>
           {Object.entries(content).map(([key, value]) => {
             const label = key.replace(/([A-Z])/g, " $1");
             return key.endsWith("Image") ? <ImageUpload key={key} label={label} value={value} onChange={url => setContent(current => ({...current, [key]:url}))} /> : <div className="field" key={key}><label htmlFor={key}>{label}</label><input id={key} value={value} onChange={e => setContent(current => ({...current, [key]:e.target.value}))} /></div>;
           })}
         </section>
         <section className="settings-card">
-          <h2>Footer social links</h2>
+          <h2>Social links</h2>
           <p>
-            Instagram, Facebook and TikTok icons are built in — no logos to upload. Turn one on, paste the link and save.
-            Leave it off to hide it from the footer. Your email is set under Store details.
+            Instagram, Facebook and TikTok icons appear in the storefront header and footer when enabled.
+            Turn one on, paste its link and save. Your email is set under Store details.
           </p>
           {SOCIAL_NETWORKS.map(({ network, label, placeholder }) => {
             const social = socials.find((entry) => entry.network === network);
@@ -231,7 +269,7 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
                   type="button"
                   role="switch"
                   aria-checked={social.enabled}
-                  aria-label={`Show ${label} in the footer`}
+                  aria-label={`Show ${label} on the storefront`}
                   className={"toggle" + (social.enabled ? " on" : "")}
                   onClick={() => updateSocial(network, { enabled: !social.enabled })}
                 >
