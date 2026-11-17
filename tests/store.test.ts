@@ -76,3 +76,91 @@ test("configured free-delivery threshold is enforced in recorded orders",async()
  expect(disabled?.shippingFee).toBe(25);expect(disabled?.total).toBe(125);
  await expect(admin.mutation(api.settings.update,{freeShippingMin:-1})).rejects.toThrow("threshold");
 });
+
+
+test("variant inventory, unit prices and order snapshots survive checkout", async () => {
+  vi.useFakeTimers();
+  try {
+    const t = await setup();
+    const admin = t.withIdentity({ subject: "owner", email: "owner@example.com" });
+    await admin.mutation(api.products.add, {
+      name: "Custom necklace", category: "Jewelry", price: 250, stock: 7,
+      options: [
+        { name: "Finish", values: ["Gold", "Silver"] },
+        { name: "Size", values: ["Small", "Large"] },
+      ],
+      variants: [
+        { values: ["Gold", "Small"], stock: 2, price: 270 },
+        { values: ["Gold", "Large"], stock: 1, price: 280 },
+        { values: ["Silver", "Small"], stock: 3 },
+        { values: ["Silver", "Large"], stock: 1 },
+      ],
+    });
+    const created = (await t.query(api.products.list, {})).find((entry) => entry.name === "Custom necklace");
+    expect(created?.stock).toBe(7);
+    expect(created?.options).toHaveLength(2);
+    const placed = await t.mutation(api.orders.createCheckout, {
+      ...customer,
+      items: [{ number: created!.number, qty: 2, variant: ["Gold", "Small"] }],
+    });
+    expect(placed?.subtotal).toBe(540);
+    expect(placed?.items[0]).toMatchObject({ price: 270, variant: "Finish: Gold · Size: Small", qty: 2 });
+    const product = await t.query(api.products.getByNumber, { number: created!.number });
+    expect(product?.stock).toBe(5);
+    expect(product?.variants?.find((entry) => entry.values.join("/") === "Gold/Small")?.stock).toBe(0);
+    expect(product?.variants?.find((entry) => entry.values.join("/") === "Silver/Small")?.stock).toBe(3);
+    await expect(t.mutation(api.orders.createCheckout, {
+      ...customer, items: [{ number: created!.number, qty: 1, variant: ["Gold", "Small"] }],
+    })).rejects.toThrow("Only 0");
+    await expect(t.mutation(api.orders.createCheckout, {
+      ...customer, items: [{ number: created!.number, qty: 1 }],
+    })).rejects.toThrow("Choose valid options");
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("timed sales apply only to selected products or collections", async () => {
+  vi.useFakeTimers();
+  try {
+    const t = await setup();
+    const admin = t.withIdentity({ subject: "owner", email: "owner@example.com" });
+    await admin.mutation(api.products.add, { name: "Rings", category: "Accessories", price: 200, stock: 10 });
+    const rings = (await t.query(api.products.list, {})).find((product) => product.name === "Rings")!;
+    const now = Date.now();
+    await admin.mutation(api.sales.add, {
+      name: "Rings only", percentOff: 50, startsAt: now - 10_000, endsAt: now + 10_000,
+      scope: "products", productNumbers: [rings.number],
+    });
+    const order = await t.mutation(api.orders.createCheckout, {
+      ...customer, items: [{ number: 1, qty: 1 }, { number: rings.number, qty: 1 }],
+    });
+    expect(order?.subtotal).toBe(300);
+    expect(order?.discount).toBe(100); // 50% of rings, not of both lines
+    await admin.mutation(api.collections.add, {
+      name: "Gifts", image: "", productNumbers: [1],
+    });
+    await admin.mutation(api.sales.add, {
+      name: "Gifts only", percentOff: 25, startsAt: now - 10_000, endsAt: now + 10_000,
+      scope: "collections", collectionNames: ["Gifts"],
+    });
+    const nextOrder = await t.mutation(api.orders.createCheckout, {
+      ...customer, items: [{ number: 1, qty: 1 }, { number: rings.number, qty: 1 }],
+    });
+    expect(nextOrder?.discount).toBe(125); // 25% on #1, 50% on rings, without stacking
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("new products create reusable category records", async () => {
+  const t = await setup();
+  const admin = t.withIdentity({ subject: "owner", email: "owner@example.com" });
+  await admin.mutation(api.products.add, { name: "Custom ring", category: "Accessories", price: 100, stock: 2 });
+  const categories = await t.query(api.categories.list, {});
+  expect(categories.map((category) => category.name)).toContain("Accessories");
+  await admin.mutation(api.products.add, { name: "Other ring", category: "Accessories", price: 150, stock: 1 });
+  expect((await t.query(api.categories.list, {})).filter((category) => category.name === "Accessories")).toHaveLength(1);
+});
