@@ -4,11 +4,13 @@ import { SignInButton, useAuth } from "@clerk/react";
 import type { Doc } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { money, normalizePhone } from "../lib/format";
-import { useCart } from "../lib/cart";
+import { cartItemKey, useCart } from "../lib/cart";
+import { priceForVariant, variantLabel } from "./productVariants";
+import { checkoutDiscount } from "./salePricing";
 import { useToast } from "../components/Toast";
 import { Icon } from "../components/Icon";
 import { useStoreUI } from "./ui";
-import { shippingTotal, discountTotal, cartTotal } from "./totals";
+import { shippingTotal } from "./totals";
 
 // Port of checkout() from src/index.html.
 export function CheckoutPage({
@@ -23,7 +25,8 @@ export function CheckoutPage({
   onOrderPlaced: (order: Doc<"orders">) => void;
 }) {
   const cart = useCart();
-  const sale = useQuery(api.sales.active);
+  const sales = useQuery(api.sales.activeList) ?? [];
+  const collections = useQuery(api.collections.list) ?? [];
   const toast = useToast();
   const { openCart, goToCategory } = useStoreUI();
   const createCheckout = useMutation(api.orders.createCheckout);
@@ -39,13 +42,14 @@ export function CheckoutPage({
 
   const byNumber = (number: number) => products.find((p) => p.number === number);
 
-  const subtotal = cart.items.reduce((s, it) => {
-    const p = byNumber(it.number);
-    return s + (p ? p.price * it.qty : 0);
-  }, 0);
+  const lines = cart.items.flatMap((item) => {
+    const product = byNumber(item.number);
+    return product ? [{ number: item.number, subtotal: priceForVariant(product, item.variant) * item.qty }] : [];
+  });
+  const subtotal = lines.reduce((sum, line) => sum + line.subtotal, 0);
   const shipping = shippingTotal(subtotal, settings);
-  const discount = discountTotal(subtotal, appliedCoupon, sale?.percentOff);
-  const total = cartTotal(subtotal, settings, appliedCoupon, sale?.percentOff);
+  const discount = checkoutDiscount(lines, appliedCoupon, sales, collections, Date.now());
+  const total = Math.max(0, subtotal + shipping - discount);
 
   if (!cart.items.length) {
     return (
@@ -71,7 +75,7 @@ export function CheckoutPage({
         city,
         address: [street, address, city].filter(Boolean).join(", "),
         notes: notes || undefined,
-        items: cart.items.map((i) => ({ number: i.number, qty: i.qty })),
+        items: cart.items.map((i) => ({ number: i.number, qty: i.qty, variant: i.variant })),
         couponCode: appliedCoupon?.code,
         userId: userId ?? undefined,
       });
@@ -193,13 +197,13 @@ export function CheckoutPage({
           const p = byNumber(it.number);
           if (!p) return null;
           return (
-            <div className="line-item" style={{ alignItems: "center" }} key={it.number}>
+            <div className="line-item" style={{ alignItems: "center" }} key={cartItemKey(it)}>
               <img style={{ width: 56, height: 65 }} src={p.img ?? ""} alt="" />
               <div className="li-info">
                 <strong>{p.name}</strong>
-                <small>Qty {it.qty}</small>
+                <small>{variantLabel(p, it.variant) ? `${variantLabel(p, it.variant)} · ` : ""}Qty {it.qty}</small>
               </div>
-              <strong>{money(p.price * it.qty)}</strong>
+              <strong>{money(priceForVariant(p, it.variant) * it.qty)}</strong>
             </div>
           );
         })}
