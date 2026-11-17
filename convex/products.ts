@@ -53,6 +53,7 @@ function cleanVariants(
   if (!options.length) return undefined;
   if (!variants?.length) throw new Error("Add stock for each option combination");
   const expected = options.reduce((total, option) => total * option.values.length, 1);
+  if (expected > 100) throw new Error("Use at most 100 variant combinations");
   if (variants.length !== expected) throw new Error("Stock every option combination");
   const seen = new Set<string>();
   const cleaned = variants.map((variant) => {
@@ -70,11 +71,16 @@ function cleanVariants(
   return cleaned;
 }
 
-async function assertCategory(ctx: Parameters<typeof requireAdmin>[0] extends never ? never : any, category: string) {
-  const categories = await ctx.db.query("categories").take(200);
-  if (categories.length && !categories.some((entry: { name: string }) => entry.name === category)) {
-    throw new Error("Choose a category from your category list");
+async function ensureCategory(ctx: {db: any}, category: string) {
+  const value = category.trim().replace(/\s+/g, " ").slice(0, 60);
+  if (!value) throw new Error("Choose a category");
+  const categories = await ctx.db.query("categories").withIndex("by_position").take(200);
+  if (!categories.some((entry: { name: string }) => entry.name.toLowerCase() === value.toLowerCase())) {
+    if (categories.length >= 200) throw new Error("Category limit reached");
+    const last = categories.at(-1);
+    await ctx.db.insert("categories", { name: value, position: (last?.position ?? -1) + 1 });
   }
+  return value;
 }
 
 export const add = mutation({
@@ -93,7 +99,7 @@ export const add = mutation({
     await requireAdmin(ctx);
     if (!args.name.trim() || !args.category.trim()) throw new Error("Enter a name and category");
     if (args.price < 0 || !Number.isFinite(args.price)) throw new Error("Enter a valid price");
-    await assertCategory(ctx, args.category);
+    const category = await ensureCategory(ctx, args.category);
 
     const options = cleanOptions(args.options ?? []);
     const variants = cleanVariants(options, args.variants);
@@ -112,7 +118,7 @@ export const add = mutation({
       name: args.name.trim(),
       price: args.price,
       stock,
-      category: args.category,
+      category,
       img: args.img,
       description: args.description,
       options: options.length ? options : undefined,
@@ -138,7 +144,7 @@ export const update = mutation({
     await requireAdmin(ctx);
     if (!args.name.trim() || !args.category.trim()) throw new Error("Enter a name and category");
     if (args.price < 0 || !Number.isFinite(args.price)) throw new Error("Enter a valid price");
-    await assertCategory(ctx, args.category);
+    const category = await ensureCategory(ctx, args.category);
 
     const options = cleanOptions(args.options ?? []);
     const variants = cleanVariants(options, args.variants);
@@ -149,7 +155,7 @@ export const update = mutation({
       name: args.name.trim(),
       price: args.price,
       stock,
-      category: args.category,
+      category,
       img: args.img,
       description: args.description,
       options: options.length ? options : undefined,
