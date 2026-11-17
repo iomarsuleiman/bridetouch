@@ -1,4 +1,7 @@
 import type { Doc } from "../../convex/_generated/dataModel";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { saleDiscount } from "./salePricing";
 import { money } from "../lib/format";
 import { useCart } from "../lib/cart";
 import { useToast } from "../components/Toast";
@@ -9,6 +12,9 @@ import { navigate } from "../hooks/useHashRoute";
 export function ProductCard({ product: p }: { product: Doc<"products"> }) {
   const cart = useCart();
   const toast = useToast();
+  const sales = useQuery(api.sales.activeList) ?? [];
+  const collections = useQuery(api.collections.list) ?? [];
+  const savings = saleDiscount([{number:p.number, subtotal:p.price}], sales, collections, Date.now());
 
   const quickAdd = () => {
     if (p.options?.length) {
@@ -45,7 +51,7 @@ export function ProductCard({ product: p }: { product: Doc<"products"> }) {
           <h3>{p.name}</h3>
           <p>{p.category}</p>
         </div>
-        <strong className="product-price">{money(p.price)}</strong>
+        <strong className="product-price">{savings ? <><s className="old-price">{money(p.price)}</s> {money(p.price - savings)}</> : money(p.price)}</strong>
       </div>
     </article>
   );
