@@ -43,7 +43,11 @@ export function SalesPage({ ctx }: { ctx: AdminCtx }) {
                 <Badge text={running ? "Active" : upcoming ? "Scheduled" : s.active ? "Ended" : "Paused"} />
                 <h3>{s.name}</h3>
                 <p>
-                  {s.percentOff}% off · {fmt(s.startsAt)} → {fmt(s.endsAt)}
+                  {s.percentOff}% off {s.scope === "products"
+                    ? `· ${s.productNumbers?.length ?? 0} selected product(s)`
+                    : s.scope === "collections"
+                      ? `· ${s.collectionNames?.join(", ") || "Selected collections"}`
+                      : "· All products"} · {fmt(s.startsAt)} → {fmt(s.endsAt)}
                 </p>
               </div>
               <div className="bottom">
