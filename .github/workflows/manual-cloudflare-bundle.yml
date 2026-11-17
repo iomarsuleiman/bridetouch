@@ -1,0 +1,46 @@
+name: Build standalone Cloudflare upload bundle
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/manual-cloudflare-bundle.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Build frontend with existing public live configuration
+        env:
+          VITE_CONVEX_URL: https://groovy-marlin-763.eu-west-1.convex.cloud
+          VITE_CONVEX_SITE_URL: https://groovy-marlin-763.eu-west-1.convex.site
+          VITE_CLERK_PUBLISHABLE_KEY: pk_test_aHVtYW5lLXNhdHlyLTQ1NTcuY2xlcmsuYWNjb3VudHMuZGV2JA
+          VITE_IMAGE_API_URL: https://melo-image-api.omaarsuliiman.workers.dev
+        run: |
+          npm run typecheck
+          npm test
+          npm run build
+          node scripts/build-inline-worker.mjs
+      - name: Publish bundle to cloudflare-build branch for manual API upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C cloudflare-build
+          git add -f .worker-bundle
+          git commit -m "Bundle production frontend from ${GITHUB_SHA}"
+          git push --force origin cloudflare-build
