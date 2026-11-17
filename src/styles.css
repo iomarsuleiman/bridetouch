@@ -163,3 +163,50 @@
     backdrop-filter: blur(16px) saturate(1.5);
   }
 }
+
+
+/* BrideTouch: tangible frosted header. The translucency is intentional:
+   fully opaque backgrounds make backdrop-filter appear not to work. */
+.store-header{
+  background:rgba(250,249,245,.50);
+  -webkit-backdrop-filter:blur(26px) saturate(1.65);
+  backdrop-filter:blur(26px) saturate(1.65);
+  border-bottom:1px solid rgba(255,255,255,.58);
+  box-shadow:0 5px 24px rgba(34,45,36,.065);
+}
+.header-social-links,.store-nav-social{display:flex;align-items:center;gap:5px}
+.header-social-links a,.store-nav-social a{
+  width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;
+  flex:none;border-radius:50%;color:#667568;transition:background-color .18s ease,color .18s ease;
+}
+.header-social-links a:hover,.store-nav-social a:hover{color:#345d40;background:rgba(61,103,69,.1)}
+.header-social-links a:focus-visible,.store-nav-social a:focus-visible{outline:2px solid #426e50;outline-offset:2px}
+.store-nav-social{display:none}
+@media(max-width:900px){
+  .header-social-links{display:none}
+  .store-nav.open .store-nav-social{
+    display:flex;justify-content:flex-start;gap:9px;padding:10px 8px 3px;
+    border-top:1px solid #eeeee8;margin-top:5px;
+  }
+  .store-nav.open .store-nav-social a{
+    padding:0;width:44px;height:44px;border:1px solid #e5e9e0;
+    background:#fff;
+  }
+  .store-nav.open .store-nav-social a::after{display:none}
+}
+/* Settings: structured list replaces the fragile comma-separated field. */
+.header-link-list{display:flex;flex-direction:column;gap:8px}
+.header-link-item{display:flex;align-items:center;gap:9px;padding:8px;border:1px solid #e6ebe4;border-radius:11px;background:#fbfcfa;min-width:0}
+.header-link-item:focus-within{border-color:#9dbba3;box-shadow:0 0 0 3px rgba(76,119,83,.10)}
+.header-link-number{width:24px;text-align:center;font-size:11px;font-weight:700;color:#9ba59b;flex:none}
+.header-link-item>input{min-width:0;flex:1;border:0;background:transparent;box-shadow:none!important;padding:8px 2px;font-size:13px}
+.header-link-item>input:focus{outline:0}
+.header-link-actions{display:flex;gap:3px;flex:none}
+.header-link-actions button{height:30px;width:30px;display:grid;place-items:center;border:0;border-radius:7px;background:transparent;color:#707f71;font-size:17px}
+.header-link-actions button:hover:not(:disabled){background:#e9f0e8;color:#355842}
+.header-link-actions button:disabled{opacity:.3;cursor:default}
+.header-link-add{align-self:flex-start;margin-top:10px}
+@media(max-width:450px){.header-link-item{gap:5px;padding:6px}.header-link-actions{gap:0}.header-link-actions button{width:27px}.header-link-number{width:17px}}
+@media(prefers-reduced-motion:reduce){
+  .header-social-links a,.store-nav-social a{transition:none}
+}
