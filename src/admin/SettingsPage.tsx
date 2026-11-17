@@ -46,9 +46,10 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
   // During a one-time owner migration the effective roster comes from Convex env
   // until an authorized admin saves it in the store's settings.
   useEffect(() => {
-    if (!s.adminEmails?.length && authorizedAdmins) setAdminEmails(authorizedAdmins);
-  }, [s.adminEmails, authorizedAdmins]);
+    if (authorizedAdmins) setAdminEmails(authorizedAdmins);
+  }, [authorizedAdmins]);
   const [newAdmin, setNewAdmin] = useState("");
+  const [savingAdmins, setSavingAdmins] = useState(false);
   const { user } = useUser();
   const myEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
   const [city, setCity] = useState(s.city);
@@ -66,7 +67,7 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
     }
     try {
       const instagramUrl = (socials.find((entry) => entry.network === "instagram")?.url ?? "").trim();
-      await update({ storeName, email, city, shipping: Number(shippingFee), freeShippingMin: Number(freeShippingMin), ...content, instagramUrl, socials: socials.map((entry) => ({ ...entry, url: entry.url.trim() })), supportUrl, adminEmails, navigation: [...new Set(navigation.map((name) => name.trim()).filter(Boolean))] });
+      await update({ storeName, email, city, shipping: Number(shippingFee), freeShippingMin: Number(freeShippingMin), ...content, instagramUrl, socials: socials.map((entry) => ({ ...entry, url: entry.url.trim() })), supportUrl, navigation: [...new Set(navigation.map((name) => name.trim()).filter(Boolean))] });
       toast("Settings saved");
     } catch {
       toast("Could not save settings");
@@ -91,29 +92,53 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
     }
   }
 
-  function addAdmin() {
+  // Administrator changes are saved immediately and acknowledged by Convex.
+  // The page never shows an unsaved person as an active administrator.
+  async function persistAdmins(next: string[]) {
+    if (savingAdmins) return false;
+    if (!myEmail || !next.includes(myEmail)) {
+      toast("Keep your own email in the administrator list");
+      return false;
+    }
+    if (!next.length) {
+      toast("At least one administrator is required");
+      return false;
+    }
+    setSavingAdmins(true);
+    try {
+      await update({ adminEmails: next });
+      setAdminEmails(next);
+      toast("Administrator access updated");
+      return true;
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Could not update administrators");
+      return false;
+    } finally {
+      setSavingAdmins(false);
+    }
+  }
+
+  async function addAdmin() {
     const address = newAdmin.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
       toast("Enter a valid email address");
       return;
     }
-    if (adminEmails.includes(address)) {
+    const effective = [...new Set((authorizedAdmins ?? adminEmails).map((email) => email.toLowerCase()))];
+    if (effective.includes(address)) {
       toast("That email is already an administrator");
       setNewAdmin("");
       return;
     }
-    // The backend requires the signed-in admin to stay in a restricted list,
-    // so adding the first person also adds you.
-    setAdminEmails((current) => (current.length === 0 && myEmail && myEmail !== address ? [myEmail, address] : [...current, address]));
-    setNewAdmin("");
+    if (await persistAdmins([...new Set([...effective, myEmail, address])])) setNewAdmin("");
   }
 
-  function removeAdmin(address: string) {
-    if (address === myEmail && adminEmails.length > 1) {
-      toast("Keep your own email in the administrator list");
+  async function removeAdmin(address: string) {
+    if (address === myEmail) {
+      toast("You cannot remove your own administrator access");
       return;
     }
-    setAdminEmails((current) => current.filter((entry) => entry !== address));
+    await persistAdmins(adminEmails.filter((entry) => entry !== address));
   }
 
   function moveLink(index: number, offset: number) {
@@ -180,7 +205,8 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
                       className="row-action"
                       aria-label={`Remove ${address}`}
                       title="Remove administrator"
-                      onClick={() => removeAdmin(address)}
+                      disabled={savingAdmins}
+                      onClick={() => void removeAdmin(address)}
                     >
                       <Icon name="trash" size="sm" />
                     </button>
@@ -198,15 +224,15 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    addAdmin();
+                    void addAdmin();
                   }
                 }}
               />
-              <button type="button" className="btn secondary" onClick={addAdmin}>
+              <button type="button" className="btn secondary" disabled={savingAdmins || authorizedAdmins === undefined} onClick={() => void addAdmin()}>
                 <Icon name="plus" size="sm" /> Add
               </button>
             </div>
-            <small>Only existing administrators can edit this list. Keep your own account listed. Changes apply when saved.</small>
+            <small>Adding or removing an administrator saves immediately. Only the listed accounts can access the dashboard.</small>
           </div>
           <h2>Storefront & header</h2>
           <p>Choose the categories and collections shown in the storefront navigation. Drag-free controls let you reorder them.</p>
