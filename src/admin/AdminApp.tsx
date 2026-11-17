@@ -42,7 +42,7 @@ export default function AdminApp({ view }: { view: string }) {
   const offers = useQuery(api.offers.list);
   const sales = useQuery(api.sales.list);
   const collections = useQuery(api.collections.list);
-  const settings = useQuery(api.settings.get);
+  const settings = useQuery(api.settings.getForAdmin);
 
   const [modal, setModal] = useState<ModalKey | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<Id<"products"> | null>(null);

@@ -8,7 +8,19 @@ React + Vite storefront and dashboard, backed by Convex and Clerk, hosted on Clo
 2. Run `npm ci`, then `npx convex dev` and `npm run dev`.
 3. Open `/` for the store or `/admin` for the dashboard.
 
-Instagram, support, branding, homepage copy, navigation and administrator email restrictions are edited in **Admin > Settings**. An empty administrator list permits all signed-in users, as requested. Add emails to restrict access. Anonymous users cannot read orders or write admin data.
+Instagram, support, branding, homepage copy, ordered header navigation and the administrator allowlist are edited in **Admin > Settings**. Social links can appear in the storefront header and footer. Administrator access is denied unless the signed-in Clerk email is explicitly allowed. Anonymous users and unlisted signed-in users cannot read orders or write admin data.
+
+### First administrator (required before enabling fail-closed access)
+
+Before deploying the new authorization functions, configure the real store-owner email(s) on the **production Convex deployment**, for example:
+
+```sh
+npx convex env set BRIDETOUCH_ADMIN_EMAILS "owner@example.com" --prod
+```
+
+Replace the placeholder with the verified email address used to sign in via Clerk. Multiple known owners can be separated by commas. This environment variable is used only until an existing administrator saves an explicit, nonempty roster in Settings. Once saved, the database roster takes precedence. An empty database roster with no configured owner email denies all dashboard access — **never deploy without establishing the owner first**. The public settings query intentionally hides administrator addresses; the private dashboard reads the effective roster. Adding a Clerk account by itself never grants dashboard access.
+
+Clerk sign-up availability is configured separately in the Clerk dashboard; disable public sign-ups or require invitations there if you also want to prevent creation of any new Clerk accounts (not merely prevent admin access).
 
 ## Verification
 
