@@ -1,9 +1,36 @@
+import { useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { Icon } from "../components/Icon";
+import { useToast } from "../components/Toast";
 import { Heading } from "./shared";
 import type { AdminCtx } from "./types";
 
-// Port of the vanilla collectionsPage().
+/** Curated collections are saved records; product categories exist independently. */
 export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
+  const toast = useToast();
+  const add = useMutation(api.collections.add);
+  const [creating, setCreating] = useState<string | null>(null);
+  const categories = [...new Set(ctx.products.map((product) => product.category.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+  async function createFromCategory(name: string) {
+    if (creating) return;
+    if (ctx.collections.some((collection) => collection.name.toLowerCase() === name.toLowerCase())) {
+      toast("This category already has a collection");
+      return;
+    }
+    const products = ctx.products.filter((product) => product.category === name);
+    setCreating(name);
+    try {
+      await add({ name, image: products.find((product) => product.img)?.img ?? "", productNumbers: products.map((product) => product.number) });
+      toast("Collection created");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Could not create collection");
+    } finally {
+      setCreating(null);
+    }
+  }
+
   return (
     <>
       <Heading
@@ -15,23 +42,64 @@ export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
           </button>
         }
       />
-      {!ctx.collections.length ? <div className="empty">Create a collection and select products to feature.</div> : null}
-      <div className="card-list">
-        {ctx.collections.map((c) => (
-          <article key={c._id} className="collection-card">
-            <img src={c.image} alt={c.name} loading="lazy" />
-            <div className="cc-body">
-              <span>
-                <strong>{c.name}</strong>
-                <small>{ctx.products.filter(p => c.productNumbers?.includes(p.number)).length} products</small>
-              </span>
-              <button className="btn icon-only ghost" onClick={() => ctx.openEditCollection(c._id)} aria-label={"Edit " + c.name}>
-                <Icon name="edit" />
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
+      {ctx.collections.length ? (
+        <div className="card-list">
+          {ctx.collections.map((collection) => {
+            const count = ctx.products.filter((product) => collection.productNumbers?.includes(product.number)).length;
+            return (
+              <article key={collection._id} className="collection-card">
+                {collection.image ? <img src={collection.image} alt={collection.name} loading="lazy" /> : <div className="collection-image-placeholder" aria-hidden="true"><Icon name="grid" /></div>}
+                <div className="cc-body">
+                  <span>
+                    <strong>{collection.name}</strong>
+                    <small>{count} {count === 1 ? "product" : "products"} · Collection</small>
+                  </span>
+                  <button className="btn icon-only ghost" onClick={() => ctx.openEditCollection(collection._id)} aria-label={"Edit " + collection.name}>
+                    <Icon name="edit" />
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="collection-empty-state">
+          <strong>No curated collections yet</strong>
+          <span>Your product categories are shown below. Turn a category into a collection, or create one from scratch.</span>
+        </div>
+      )}
+      {categories.length ? (
+        <section className="collection-category-section" aria-label="Product categories">
+          <div className="collection-category-heading">
+            <h2>Product categories</h2>
+            <p>These come from your saved products, not from demo data.</p>
+          </div>
+          <div className="card-list">
+            {categories.map((name) => {
+              const products = ctx.products.filter((product) => product.category === name);
+              const alreadySaved = ctx.collections.some((collection) => collection.name.toLowerCase() === name.toLowerCase());
+              const image = products.find((product) => product.img)?.img;
+              return (
+                <article key={name} className="collection-card">
+                  {image ? <img src={image} alt="" loading="lazy" /> : <div className="collection-image-placeholder" aria-hidden="true"><Icon name="grid" /></div>}
+                  <div className="cc-body">
+                    <span>
+                      <strong>{name}</strong>
+                      <small>{products.length} {products.length === 1 ? "product" : "products"} · Category</small>
+                    </span>
+                    <button type="button" className="btn secondary" disabled={alreadySaved || creating !== null}
+                      onClick={() => void createFromCategory(name)}>
+                      {alreadySaved ? "Added" : creating === name ? "Creating…" : "Create collection"}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : !ctx.collections.length ? (
+        <div className="empty">Add products with categories, or create a collection from scratch.</div>
+      ) : null}
     </>
   );
 }
