@@ -24,7 +24,9 @@ export function CatalogPage({
   const search = query.trim().toLowerCase();
 
   const items = products
-    .filter((p) => category === "All" || (collection ? collection.productNumbers?.includes(p.number) : p.category === category))
+    .filter((p) => category === "All" || (collection
+      ? (collection.productNumbers?.includes(p.number) || (!collection.productNumbers?.length && p.category === category))
+      : p.category === category))
     .filter((p) => !search || [p.name, p.category, p.description ?? ""].some(value => value.toLowerCase().includes(search)));
 
   return (

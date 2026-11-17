@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
@@ -10,8 +10,25 @@ import type { AdminCtx } from "./types";
 export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
   const add = useMutation(api.collections.add);
+  const addCategory = useMutation(api.categories.add);
+  const savedCategories = useQuery(api.categories.list) ?? [];
+  const [newCategory, setNewCategory] = useState("");
   const [creating, setCreating] = useState<string | null>(null);
-  const categories = [...new Set(ctx.products.map((product) => product.category.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const categories = [...new Set([...savedCategories.map((entry) => entry.name), ...ctx.products.map((product) => product.category.trim())].filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+  async function createCategory() {
+    if (!newCategory.trim() || creating) return;
+    setCreating(newCategory);
+    try {
+      await addCategory({ name: newCategory.trim() });
+      setNewCategory("");
+      toast("Category created");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Could not save category");
+    } finally {
+      setCreating(null);
+    }
+  }
 
   async function createFromCategory(name: string) {
     if (creating) return;
@@ -45,14 +62,14 @@ export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
       {ctx.collections.length ? (
         <div className="card-list">
           {ctx.collections.map((collection) => {
-            const count = ctx.products.filter((product) => collection.productNumbers?.includes(product.number)).length;
+            const count = ctx.products.filter((product) => collection.productNumbers?.includes(product.number) || (!collection.productNumbers?.length && product.category === collection.name)).length;
             return (
               <article key={collection._id} className="collection-card">
                 {collection.image ? <img src={collection.image} alt={collection.name} loading="lazy" /> : <div className="collection-image-placeholder" aria-hidden="true"><Icon name="grid" /></div>}
                 <div className="cc-body">
                   <span>
                     <strong>{collection.name}</strong>
-                    <small>{count} {count === 1 ? "product" : "products"} · Collection</small>
+                    <small>{count ? `${count} ${count === 1 ? "product" : "products"}` : "No products assigned — edit to add"} · Collection</small>
                   </span>
                   <button className="btn icon-only ghost" onClick={() => ctx.openEditCollection(collection._id)} aria-label={"Edit " + collection.name}>
                     <Icon name="edit" />
@@ -68,11 +85,17 @@ export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
           <span>Your product categories are shown below. Turn a category into a collection, or create one from scratch.</span>
         </div>
       )}
-      {categories.length ? (
-        <section className="collection-category-section" aria-label="Product categories">
+      <section className="collection-category-section" aria-label="Product categories">
           <div className="collection-category-heading">
             <h2>Product categories</h2>
-            <p>These come from your saved products, not from demo data.</p>
+            <p>Categories stay saved even when they contain no products.</p>
+          </div>
+          <div className="option-add-value collection-create-category">
+            <input aria-label="New product category" placeholder="New category" value={newCategory}
+              maxLength={60} onChange={(e) => setNewCategory(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void createCategory(); } }} />
+            <button type="button" className="btn secondary" disabled={!newCategory.trim() || creating !== null}
+              onClick={() => void createCategory()}><Icon name="plus" size="sm" /> Add category</button>
           </div>
           <div className="card-list">
             {categories.map((name) => {
@@ -96,10 +119,7 @@ export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
               );
             })}
           </div>
-        </section>
-      ) : !ctx.collections.length ? (
-        <div className="empty">Add products with categories, or create a collection from scratch.</div>
-      ) : null}
+      </section>
     </>
   );
 }

@@ -1,7 +1,10 @@
 import schema from "./schema";
+import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { normalizePhone } from "../src/lib/format";
 import { shippingTotal } from "../src/store/totals";
+import { checkoutDiscount } from "../src/store/salePricing";
+import { matchVariant, priceForVariant, variantKey, variantLabel } from "../src/store/productVariants";
 import { requireAdmin } from "./access";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -23,11 +26,11 @@ export const createCheckout = mutation({
     city: v.string(),
     address: v.string(),
     notes: v.optional(v.string()),
-    items: v.array(v.object({ number: v.number(), qty: v.number() })),
+    items: v.array(v.object({ number: v.number(), qty: v.number(), variant: v.optional(v.array(v.string())) })),
     couponCode: v.optional(v.string()),
     userId: v.optional(v.string()),
   },
-  returns: v.union(document,v.null()),
+  returns: v.union(document, v.null()),
   handler: async (ctx, args) => {
     const settings = await ctx.db.query("settings").first();
     const identity = await ctx.auth.getUserIdentity();
@@ -37,69 +40,71 @@ export const createCheckout = mutation({
     if (!/^1[0125][0-9]{8}$/.test(phone)) throw new Error("Enter a valid Egyptian mobile number");
     if (args.customer.length > 200 || args.address.length > 1000 || (args.notes?.length ?? 0) > 2000) throw new Error("Order details are too long");
     if (!args.items.length || args.items.length > 50) throw new Error("Your bag must contain between 1 and 50 products");
-    const quantities = new Map<number,number>();
+
+    // Group by product AND exact variant. Never merge distinct colors or sizes.
+    const quantities = new Map<string, { number: number; qty: number; variant?: string[] }>();
     for (const item of args.items) {
       if (!Number.isSafeInteger(item.qty) || item.qty < 1 || !Number.isSafeInteger(item.number)) throw new Error("Invalid product quantity");
-      quantities.set(item.number,(quantities.get(item.number) ?? 0)+item.qty);
-    }
-    // Validate stock and gather product snapshots
-    const lines = [];
-    let subtotal = 0;
-    for (const [number, qty] of quantities) {
-      const item = {number, qty};
-      const product = await ctx.db
-        .query("products")
-        .withIndex("by_number", (q) => q.eq("number", item.number))
-        .first();
-      if (!product) throw new Error(`Unknown product ${item.number}`);
-      if (product.stock < item.qty)
-        throw new Error(`Only ${product.stock} available of ${product.name}`);
-      subtotal += product.price * item.qty;
-      lines.push({ product, qty: item.qty });
+      if (item.variant && (item.variant.length > 5 || item.variant.some((value) => value.length > 100))) throw new Error("Invalid product options");
+      const key = JSON.stringify([item.number, variantKey(item.variant)]);
+      const previous = quantities.get(key);
+      quantities.set(key, { number: item.number, qty: (previous?.qty ?? 0) + item.qty, variant: item.variant });
     }
 
-    // Discount: coupon code vs. best active timed sale — the larger applies.
-    let discount = 0;
+    const lines: { product: Doc<"products">; qty: number; variant?: string[]; unitPrice: number }[] = [];
+    const updated = new Map<number, { stock: number; variants?: { values: string[]; stock: number; price?: number }[] }>();
+    let subtotal = 0;
+    for (const { number, qty, variant } of quantities.values()) {
+      const product = await ctx.db.query("products").withIndex("by_number", (q) => q.eq("number", number)).first();
+      if (!product) throw new Error(`Unknown product ${number}`);
+      if (product.options?.length) {
+        if (!variant || !matchVariant(product, variant)) throw new Error(`Choose valid options for ${product.name}`);
+      } else if (variant?.length) throw new Error(`Unexpected options for ${product.name}`);
+      const prior = updated.get(number) ?? {
+        stock: product.stock,
+        variants: product.variants?.map((entry) => ({ ...entry, values: [...entry.values] })),
+      };
+      const row = prior.variants?.find((entry) => variantKey(entry.values) === variantKey(variant));
+      const stock = product.options?.length ? row?.stock ?? 0 : prior.stock;
+      if (qty > stock) throw new Error(`Only ${stock} available of ${product.name}`);
+      if (row) row.stock -= qty;
+      prior.stock -= qty;
+      updated.set(number, prior);
+      const unitPrice = priceForVariant(product, variant);
+      lines.push({ product, qty, variant, unitPrice });
+      subtotal += unitPrice * qty;
+    }
+
     let couponDoc;
     if (args.couponCode) {
-      couponDoc = await ctx.db
-        .query("coupons")
-        .withIndex("by_code", (q) => q.eq("code", args.couponCode!.toUpperCase()))
-        .first();
+      couponDoc = await ctx.db.query("coupons").withIndex("by_code", (q) => q.eq("code", args.couponCode!.toUpperCase())).first();
       if (!couponDoc || !couponDoc.active) throw new Error("Invalid coupon code");
-      discount =
-        couponDoc.type === "Percentage"
-          ? Math.round((subtotal * couponDoc.value) / 100)
-          : Math.min(subtotal, couponDoc.value);
     }
     const now = Date.now();
     const sales = await ctx.db.query("sales").take(5000);
-    const sale = sales
-      .filter((s) => s.active && s.startsAt <= now && now <= s.endsAt)
-      .sort((a, b) => b.percentOff - a.percentOff)[0];
-    if (sale) {
-      discount = Math.max(discount, Math.round((subtotal * sale.percentOff) / 100));
-    }
-
-    // Use the same configurable delivery calculation as the cart and checkout UI.
+    const collections = await ctx.db.query("collections").take(500);
+    const discount = checkoutDiscount(
+      lines.map(({ product, qty, unitPrice }) => ({ number: product.number, subtotal: unitPrice * qty })),
+      couponDoc,
+      sales,
+      collections,
+      now,
+    );
     const shipping = shippingTotal(subtotal, settings ?? undefined);
     const total = Math.max(0, subtotal + shipping - discount);
-
-    const max = await ctx.db
-      .query("orders")
-      .withIndex("by_number")
-      .order("desc")
-      .first();
-
+    const max = await ctx.db.query("orders").withIndex("by_number").order("desc").first();
+    const number = (max?.number ?? 1020) + 1;
     const orderId = await ctx.db.insert("orders", {
-      number: (max?.number ?? 1020) + 1,
+      number,
       customer: args.customer.trim(),
       phone,
-      date: new Date().toISOString(),
-      placedAt: Date.now(),
-      items: lines.map(({product,qty}) => ({number:product.number, qty, name:product.name, price:product.price})),
-      subtotal, shippingFee:shipping, discount,
-      total,
+      date: new Date(now).toISOString(),
+      placedAt: now,
+      items: lines.map(({ product, qty, variant, unitPrice }) => ({
+        number: product.number, qty, name: product.name, price: unitPrice,
+        variant: variantLabel(product, variant) || undefined,
+      })),
+      subtotal, shippingFee: shipping, discount, total,
       status: "New",
       payment: "Unpaid",
       delivery: "Unfulfilled",
@@ -109,15 +114,13 @@ export const createCheckout = mutation({
       userId: identity?.subject,
     });
 
-    // Decrement stock and record coupon use
-    for (const { product, qty } of lines) {
-      await ctx.db.patch(product._id, { stock: Math.max(0, product.stock - qty) });
+    for (const [productNumber, changes] of updated) {
+      const product = lines.find(({ product }) => product.number === productNumber)!.product;
+      await ctx.db.patch(product._id, { stock: changes.stock, variants: changes.variants });
     }
     if (couponDoc) await ctx.db.patch(couponDoc._id, { uses: couponDoc.uses + 1 });
-
-    await ctx.scheduler.runAfter(0, internal.pushDelivery.sendNewOrder, {number:(max?.number ?? 1020)+1});
-    const order = await ctx.db.get(orderId);
-    return order;
+    await ctx.scheduler.runAfter(0, internal.pushDelivery.sendNewOrder, { number });
+    return await ctx.db.get(orderId);
   },
 });
 

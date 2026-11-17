@@ -11,6 +11,21 @@ export function HomePage({ products, settings, collections }: { products: Doc<"p
   const heroImg = settings.heroImage || products[0]?.img || "";
   const storyImg = settings.storyImage || products[4]?.img || "";
 
+  // Never advertise empty placeholder collections as if they contain products.
+  // Real product categories appear as browseable groups even before a collection is curated.
+  const savedCollections = collections.map((collection) => {
+    const members = products.filter((product) => collection.productNumbers?.includes(product.number)
+      || (!collection.productNumbers?.length && product.category === collection.name));
+    return { name: collection.name, image: collection.image || members[0]?.img || "", count: members.length };
+  }).filter((collection) => collection.count > 0);
+  const uncoveredCategories = [...new Set(products.map((product) => product.category))]
+    .filter((name) => !savedCollections.some((collection) => collection.name.toLowerCase() === name.toLowerCase()))
+    .map((name) => {
+      const members = products.filter((product) => product.category === name);
+      return { name, image: members[0]?.img || "", count: members.length };
+    });
+  const browseGroups = [...savedCollections, ...uncoveredCategories];
+
   const grid = (items: Doc<"products">[]): ReactNode => items.length ? (
     <div className="product-grid">
       {items.map((p) => (
@@ -35,7 +50,22 @@ export function HomePage({ products, settings, collections }: { products: Doc<"p
           <img className="hero-img" src={heroImg} alt="Handmade ceramic piece" />
         </div> : null}
       </section>
-      {collections.length ? <section className="shop-section storefront-collections"><div className="section-heading"><h2>Explore our collections.</h2></div><div className="card-list">{collections.map(c => <button className="collection-card" key={c._id} onClick={() => goToCategory(c.name)}>{c.image ? <img src={c.image} alt={c.name} loading="lazy" /> : null}<span className="cc-body"><strong>{c.name}</strong><small>{products.filter(p => c.productNumbers?.includes(p.number)).length} pieces</small></span></button>)}</div></section> : null}
+      {browseGroups.length ? (
+        <section className="shop-section storefront-collections">
+          <div className="section-heading"><h2>Explore our collections.</h2></div>
+          <div className="card-list">
+            {browseGroups.map((collection) => (
+              <button className="collection-card" key={collection.name} onClick={() => goToCategory(collection.name)}>
+                {collection.image ? <img src={collection.image} alt="" loading="lazy" /> : null}
+                <span className="cc-body">
+                  <strong>{collection.name}</strong>
+                  <small>{collection.count} {collection.count === 1 ? "piece" : "pieces"}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
       <section className="shop-section">
         <div className="section-heading">
           <div>
