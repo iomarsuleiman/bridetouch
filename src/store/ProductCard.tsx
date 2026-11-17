@@ -11,6 +11,10 @@ export function ProductCard({ product: p }: { product: Doc<"products"> }) {
   const toast = useToast();
 
   const quickAdd = () => {
+    if (p.options?.length) {
+      navigate("product/" + p.number);
+      return;
+    }
     const current = cart.items.find((i) => i.number === p.number)?.qty ?? 0;
     if (current + 1 > p.stock) {
       toast(`Only ${p.stock} available`);
@@ -25,7 +29,7 @@ export function ProductCard({ product: p }: { product: Doc<"products"> }) {
       <div className="product-photo" role="group" aria-label={p.name}>
         <img src={p.img ?? ""} alt={p.name} loading="lazy" />
         {p.tag ? <span className="tile-tag">{p.tag}</span> : null}
-        <button className="quick-add" aria-label={`Add ${p.name} to cart`} onClick={quickAdd}>
+        <button className="quick-add" aria-label={p.options?.length ? `Choose options for ${p.name}` : `Add ${p.name} to cart`} onClick={quickAdd}>
           <Icon name="plus" />
         </button>
         <button
