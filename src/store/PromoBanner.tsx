@@ -34,7 +34,7 @@ export function PromoBanner() {
     return (
       <div className="demo-banner">
         <Icon name="sparkle" size="sm" />
-        {sale.name} · {sale.percentOff}% off everything applied at checkout
+        {sale.name} · {sale.percentOff}% off {sale.scope === "products" ? "selected products" : sale.scope === "collections" ? "selected collections" : "everything"} at checkout
         <span className="light banner-clock">· {countdown(sale.endsAt - now)} left</span>
         <button type="button" onClick={() => goToCategory("All")}>
           Shop the sale <Icon name="arrow" size="sm" />
