@@ -399,60 +399,79 @@ function OfferModal({
 function SaleModal({ onClose }: { onClose: () => void }) {
   const toast = useToast();
   const add = useMutation(api.sales.add);
+  const products = useQuery(api.products.list) ?? [];
+  const collections = useQuery(api.collections.list) ?? [];
   const { run, form, footer } = useFormModal(onClose, toast);
   const toLocal = (ms: number) =>
     new Date(ms - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-  const [name, setName] = useState("Weekend flash — 20% off");
+  const [name, setName] = useState("");
   const [percentOff, setPercentOff] = useState("20");
   const [startsAt, setStartsAt] = useState(() => toLocal(Date.now()));
-  const [endsAt, setEndsAt] = useState(() =>
-    toLocal(Date.now() + 3 * 24 * 60 * 60 * 1000),
-  );
+  const [endsAt, setEndsAt] = useState(() => toLocal(Date.now() + 3 * 24 * 60 * 60 * 1000));
+  const [scope, setScope] = useState<"all" | "products" | "collections">("all");
+  const [productNumbers, setProductNumbers] = useState<number[]>([]);
+  const [collectionNames, setCollectionNames] = useState<string[]>([]);
 
   function save() {
+    if (scope === "products" && !productNumbers.length) { toast("Select at least one product"); return; }
+    if (scope === "collections" && !collectionNames.length) { toast("Select at least one collection"); return; }
     run(async () => {
       await add({
-        name,
-        percentOff: Number(percentOff),
-        startsAt: new Date(startsAt).getTime(),
-        endsAt: new Date(endsAt).getTime(),
+        name, percentOff: Number(percentOff), startsAt: new Date(startsAt).getTime(),
+        endsAt: new Date(endsAt).getTime(), scope,
+        productNumbers: scope === "products" ? productNumbers : undefined,
+        collectionNames: scope === "collections" ? collectionNames : undefined,
       });
     });
   }
 
   return (
-    <ModalShell title="Create sale" onClose={onClose} footer={footer(save)}>
+    <ModalShell title="Create sale" large onClose={onClose} footer={footer(save)}>
       {form(
         <>
           <Field label="Sale name" name="name" value={name} onChange={setName} autoFocus />
+          <Field label="Discount (%)" name="percentOff" type="number" min={1} value={percentOff} onChange={setPercentOff} />
           <div className="grid-2">
-            <Field
-              label="Percent off"
-              name="percentOff"
-              type="number"
-              min={1}
-              value={percentOff}
-              onChange={setPercentOff}
-            />
+            <Field label="Starts at" name="startsAt" type="datetime-local" value={startsAt} onChange={setStartsAt} />
+            <Field label="Ends at" name="endsAt" type="datetime-local" value={endsAt} onChange={setEndsAt} />
           </div>
-          <Field
-            label="Starts at"
-            name="startsAt"
-            type="datetime-local"
-            value={startsAt}
-            onChange={setStartsAt}
-          />
-          <Field
-            label="Ends at"
-            name="endsAt"
-            type="datetime-local"
-            value={endsAt}
-            onChange={setEndsAt}
-          />
-          <p className="form-help">
-            While the sale is running it applies automatically at checkout — the larger of the
-            sale or a customer's coupon code is used.
-          </p>
+          <fieldset className="sale-scope">
+            <legend>Applies to</legend>
+            <div className="category-picker" role="group" aria-label="Sale audience">
+              {([["all", "All products"], ["products", "Selected products"], ["collections", "Selected collections"]] as const).map(([value, label]) => (
+                <button key={value} className={"chip" + (scope === value ? " on" : "")}
+                  type="button" aria-pressed={scope === value} onClick={() => setScope(value)}>{label}</button>
+              ))}
+            </div>
+            {scope === "products" ? (
+              <div className="sale-target-list">
+                {products.map((product) => (
+                  <label key={product._id}>
+                    <input type="checkbox" checked={productNumbers.includes(product.number)}
+                      onChange={(e) => setProductNumbers((current) => e.target.checked
+                        ? [...current, product.number] : current.filter((number) => number !== product.number))} />
+                    <span>{product.name}</span>
+                  </label>
+                ))}
+                {!products.length ? <p>Add a product first.</p> : null}
+              </div>
+            ) : null}
+            {scope === "collections" ? (
+              <div className="sale-target-list">
+                {collections.map((collection) => (
+                  <label key={collection._id}>
+                    <input type="checkbox" checked={collectionNames.includes(collection.name)}
+                      onChange={(e) => setCollectionNames((current) => e.target.checked
+                        ? [...current, collection.name] : current.filter((name) => name !== collection.name))} />
+                    <span>{collection.name}</span>
+                    <small>{collection.productNumbers?.length ?? 0} products</small>
+                  </label>
+                ))}
+                {!collections.length ? <p>Create a collection and assign products first.</p> : null}
+              </div>
+            ) : null}
+          </fieldset>
+          <p className="form-help">The best eligible sale per item is compared with any coupon at checkout. Discounts do not stack.</p>
         </>,
       )}
     </ModalShell>
