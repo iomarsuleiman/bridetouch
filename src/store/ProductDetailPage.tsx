@@ -34,7 +34,7 @@ export function ProductDetailPage({ product: p }: { product: Doc<"products"> }) 
   function addToBag(buyNow = false) {
     const item = { number: p.number, qty: quantity, variant: chosen };
     const current = cart.items.find((entry) => cartItemKey(entry) === cartItemKey(item))?.qty ?? 0;
-    if (!valid || stock <= 0 || current + (buyNow ? 0 : quantity) > stock) {
+    if (!valid || stock <= 0 || (buyNow ? quantity : current + quantity) > stock) {
       toast(stock ? `Only ${stock} available` : "This option is sold out");
       return;
     }
