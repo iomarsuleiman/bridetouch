@@ -119,20 +119,44 @@ function ProductModal({
   const [name, setName] = useState(product?.name ?? "");
   const [price, setPrice] = useState(String(product?.price ?? 300));
   const [stock, setStock] = useState(String(product?.stock ?? 1));
+  const categories = useQuery(api.categories.list) ?? [];
   const [category, setCategory] = useState(product?.category ?? "Ceramics");
+  const [newCategory, setNewCategory] = useState("");
+  const createCategory = useMutation(api.categories.add);
+  const [options, setOptions] = useState<{name:string;values:string[]}[]>(product?.options ?? []);
+  const [variantStocks, setVariantStocks] = useState<Record<string,string>>(() =>
+    Object.fromEntries((product?.variants ?? []).map((variant) => [JSON.stringify(variant.values), String(variant.stock)]))
+  );
+  const [variantPrices, setVariantPrices] = useState<Record<string,string>>(() =>
+    Object.fromEntries((product?.variants ?? []).filter((v) => v.price !== undefined).map((v) => [JSON.stringify(v.values), String(v.price)]))
+  );
+  const combinations = options.reduce<string[][]>((rows, option) =>
+    rows.flatMap((row) => option.values.map((value) => [...row,value])), [[]]);
   const [img, setImg] = useState(product?.img ?? "");
   const [description, setDescription] = useState(product?.description ?? "");
 
   function save() {
     if (!check()) return;
     run(async () => {
+      const validOptions = options.filter((option) => option.name.trim()).map((option) => ({
+        name: option.name.trim(), values: [...new Set(option.values.map((value) => value.trim()).filter(Boolean))],
+      }));
+      if (validOptions.some((option) => !option.values.length)) throw new Error("Every option needs a value");
+      const variants = validOptions.length ? combinations.map((values) => {
+        const key = JSON.stringify(values);
+        const quantity = Number(variantStocks[key] ?? "0");
+        const priceValue = variantPrices[key]?.trim();
+        return { values, stock: quantity, ...(priceValue ? {price:Number(priceValue)} : {}) };
+      }) : undefined;
       const payload = {
         name,
         price: Number(price),
-        stock: Number(stock),
+        stock: variants ? variants.reduce((sum, v) => sum + v.stock, 0) : Number(stock),
         category,
         img: img || undefined,
         description: description || undefined,
+        options: validOptions,
+        variants,
       };
       if (product) await update({ id: product._id, ...payload });
       else await add(payload);
@@ -146,9 +170,48 @@ function ProductModal({
           <Field label="Product name" name="name" value={name} onChange={setName} autoFocus />
           <div className="grid-2">
             <Field label="Price (EGP)" name="price" type="number" min={0} value={price} onChange={setPrice} />
-            <Field label="Inventory" name="stock" type="number" min={0} value={stock} onChange={setStock} />
+            <Field label={options.length ? "Inventory (calculated from variants)" : "Inventory"} name="stock" type="number" min={0} value={options.length ? String(combinations.reduce((sum, values) => sum + Number(variantStocks[JSON.stringify(values)] ?? "0"), 0)) : stock} onChange={setStock} disabled={options.length > 0} />
           </div>
-          <Field label="Category" name="category" value={category} onChange={setCategory} />
+          <div className="field">
+            <label htmlFor="product-category">Category</label>
+            <select id="product-category" value={category} required onChange={(e) => setCategory(e.target.value)}>
+              {!categories.some((c) => c.name === category) && category ? <option value={category}>{category} (existing)</option> : null}
+              <option value="" disabled>Choose a category</option>
+              {categories.map((c) => <option key={c._id} value={c.name}>{c.name}</option>)}
+            </select>
+            <div className="inline-category-create">
+              <input aria-label="New category name" placeholder="New category" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
+              <button type="button" className="btn secondary" onClick={async () => {
+                try { await createCategory({name:newCategory}); setCategory(newCategory.trim()); setNewCategory(""); toast("Category added"); }
+                catch(e) { toast(e instanceof Error ? e.message : "Could not add category"); }
+              }}>Add</button>
+            </div>
+          </div>
+          <div className="field product-option-editor">
+            <label>Options & variant inventory</label>
+            <small>Add any option, such as Color, Size, Material or Finish. Stock is saved separately for every combination.</small>
+            {options.map((option, index) => (
+              <div key={index} className="product-option-row">
+                <input aria-label={`Option ${index + 1} name`} placeholder="Option name" value={option.name} onChange={(e) => setOptions((current) => current.map((item,i) => i === index ? {...item,name:e.target.value} : item))} />
+                <input aria-label={`Option ${index + 1} values`} placeholder="Values separated by commas" value={option.values.join(", ")} onChange={(e) => setOptions((current) => current.map((item,i) => i === index ? {...item,values:e.target.value.split(",").map((v) => v.trim())} : item))} />
+                <button type="button" aria-label="Remove option" onClick={() => setOptions((current) => current.filter((_,i) => i !== index))}>×</button>
+              </div>
+            ))}
+            {options.length < 5 ? <button type="button" className="btn secondary" onClick={() => setOptions((current) => [...current,{name:"",values:[""]}])}>Add option</button> : null}
+            {options.length && combinations.length <= 200 ? (
+              <div className="variant-stock-list">
+                {combinations.map((values) => {
+                  const key = JSON.stringify(values);
+                  return <div key={key} className="variant-stock-row">
+                    <span>{values.join(" / ")}</span>
+                    <input type="number" min={0} step={1} required aria-label={`Stock for ${values.join(" / ")}`} placeholder="Stock" value={variantStocks[key] ?? "0"} onChange={(e) => setVariantStocks((current) => ({...current,[key]:e.target.value}))} />
+                    <input type="number" min={0} aria-label={`Price override for ${values.join(" / ")}`} placeholder="Price (optional)" value={variantPrices[key] ?? ""} onChange={(e) => setVariantPrices((current) => ({...current,[key]:e.target.value}))} />
+                  </div>;
+                })}
+              </div>
+            ) : null}
+            {combinations.length > 200 ? <small>Too many combinations. Reduce the number of values.</small> : null}
+          </div>
           <ImageUpload label="Product photo" value={img} onChange={setImg} />
           <div className="field">
             <label htmlFor="f-description">Description</label>
