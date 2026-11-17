@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { saleDiscount } from "./salePricing";
 import type { Doc } from "../../convex/_generated/dataModel";
 import { money } from "../lib/format";
 import { cartItemKey, useCart } from "../lib/cart";
@@ -14,6 +17,8 @@ export function ProductDetailPage({ product: p }: { product: Doc<"products"> }) 
   const toast = useToast();
   const { goToCategory } = useStoreUI();
   const [quantity, setQuantity] = useState(1);
+  const sales = useQuery(api.sales.activeList) ?? [];
+  const collections = useQuery(api.collections.list) ?? [];
   const [selected, setSelected] = useState<string[]>(() =>
     p.variants?.find((variant) => variant.stock > 0)?.values ??
     p.options?.map((option) => option.values[0]) ?? [],
@@ -23,6 +28,8 @@ export function ProductDetailPage({ product: p }: { product: Doc<"products"> }) 
   const selectedVariant = hasOptions ? matchVariant(p, chosen) : undefined;
   const stock = availableStock(p, chosen);
   const unitPrice = priceForVariant(p, chosen);
+  const saleSavings = saleDiscount([{ number: p.number, subtotal: unitPrice }], sales, collections, Date.now());
+  const quantitySavings = saleDiscount([{ number: p.number, subtotal: unitPrice * Math.min(quantity, Math.max(1, stock)) }], sales, collections, Date.now());
   const maxQty = Math.max(1, stock);
   const valid = !hasOptions || !!selectedVariant;
 
@@ -58,7 +65,7 @@ export function ProductDetailPage({ product: p }: { product: Doc<"products"> }) 
       </div>
       <div className="detail-info">
         <h1>{p.name}</h1>
-        <div className="price">{money(unitPrice)}</div>
+        <div className="price">{saleSavings ? <><s className="old-price">{money(unitPrice)}</s> {money(unitPrice - saleSavings)}</> : money(unitPrice)}</div>
         <p className="desc">{p.description}</p>
         {hasOptions
           ? p.options!.map((option, index) => (
@@ -100,7 +107,7 @@ export function ProductDetailPage({ product: p }: { product: Doc<"products"> }) 
         </div>
         <div className="product-purchase-actions">
           <button className="btn primary" onClick={() => addToBag(false)} disabled={!valid || stock <= 0}>
-            Add to bag · {money(unitPrice * Math.min(quantity, maxQty))} <Icon name="bag" size="sm" />
+            Add to bag · {money(unitPrice * Math.min(quantity, maxQty) - quantitySavings)} <Icon name="bag" size="sm" />
           </button>
           <button className="btn secondary" onClick={() => addToBag(true)} disabled={!valid || stock <= 0}>
             Buy now <Icon name="arrow" size="sm" />
