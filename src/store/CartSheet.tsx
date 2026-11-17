@@ -2,12 +2,14 @@ import { useQuery } from "convex/react";
 import type { Doc } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { money } from "../lib/format";
-import { useCart } from "../lib/cart";
+import { cartItemKey, useCart, type CartItem } from "../lib/cart";
+import { availableStock, priceForVariant, variantLabel } from "./productVariants";
+import { checkoutDiscount } from "./salePricing";
 import { useToast } from "../components/Toast";
 import { Icon } from "../components/Icon";
 import { navigate } from "../hooks/useHashRoute";
 import { useStoreUI } from "./ui";
-import { shippingTotal, discountTotal, cartTotal } from "./totals";
+import { shippingTotal } from "./totals";
 
 // Port of cartSheet() from src/index.html.
 export function CartSheet({
@@ -26,20 +28,22 @@ export function CartSheet({
   onApplyCoupon: (coupon: Doc<"coupons">) => void;
 }) {
   const cart = useCart();
-  const sale = useQuery(api.sales.active);
+  const sales = useQuery(api.sales.activeList) ?? [];
+  const collections = useQuery(api.collections.list) ?? [];
   const toast = useToast();
   const { closeCart, goToCategory } = useStoreUI();
   const coupon = useQuery(api.coupons.validate, {code: couponInput.trim()});
 
   const byNumber = (number: number) => products.find((p) => p.number === number);
 
-  const subtotal = cart.items.reduce((s, it) => {
-    const p = byNumber(it.number);
-    return s + (p ? p.price * it.qty : 0);
-  }, 0);
+  const lines = cart.items.flatMap((item) => {
+    const product = byNumber(item.number);
+    return product ? [{ number: item.number, subtotal: priceForVariant(product, item.variant) * item.qty }] : [];
+  });
+  const subtotal = lines.reduce((sum, line) => sum + line.subtotal, 0);
   const shipping = shippingTotal(subtotal, settings);
-  const discount = discountTotal(subtotal, appliedCoupon, sale?.percentOff);
-  const total = cartTotal(subtotal, settings, appliedCoupon, sale?.percentOff);
+  const discount = checkoutDiscount(lines, appliedCoupon, sales, collections, Date.now());
+  const total = Math.max(0, subtotal + shipping - discount);
 
   const applyCoupon = () => {
     const code = couponInput.trim().toUpperCase();
@@ -52,15 +56,13 @@ export function CartSheet({
     }
   };
 
-  const changeQty = (p: Doc<"products">, delta: number) => {
-    const item = cart.items.find((i) => i.number === p.number);
-    if (!item) return;
+  const changeQty = (product: Doc<"products">, item: CartItem, delta: number) => {
     const next = item.qty + delta;
-    if (delta > 0 && next > p.stock) {
-      toast("Stock limit reached");
+    if (delta > 0 && next > availableStock(product, item.variant)) {
+      toast("Stock limit reached for this option");
       return;
     }
-    cart.setQty(p.number, next);
+    cart.setQty(product.number, next, item.variant);
   };
 
   return (
@@ -82,31 +84,31 @@ export function CartSheet({
                 const p = byNumber(it.number);
                 if (!p) return null;
                 return (
-                  <div className="line-item" key={it.number}>
+                  <div className="line-item" key={cartItemKey(it)}>
                     <img src={p.img ?? ""} alt="" />
                     <div className="li-info">
                       <strong>{p.name}</strong>
-                      <small>{p.color}</small>
+                      <small>{variantLabel(p, it.variant) || p.color}</small>
                       <div className="qty-step" style={{ width: 106, minWidth: 0, height: 36 }}>
                         <button
-                          onClick={() => changeQty(p, -1)}
+                          onClick={() => changeQty(p, it, -1)}
                           aria-label={`Decrease ${p.name}`}
                         >
                           <Icon name="minus" size="sm" />
                         </button>
                         {it.qty}
                         <button
-                          onClick={() => changeQty(p, 1)}
+                          onClick={() => changeQty(p, it, 1)}
                           aria-label={`Increase ${p.name}`}
                         >
                           <Icon name="plus" size="sm" />
                         </button>
                       </div>
-                      <button className="remove" onClick={() => cart.remove(p.number)}>
+                      <button className="remove" onClick={() => cart.remove(p.number, it.variant)}>
                         Remove
                       </button>
                     </div>
-                    <strong style={{ fontSize: 12 }}>{money(p.price * it.qty)}</strong>
+                    <strong style={{ fontSize: 12 }}>{money(priceForVariant(p, it.variant) * it.qty)}</strong>
                   </div>
                 );
               })}
