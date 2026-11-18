@@ -44,3 +44,32 @@ export const initialize = internalMutation({args:{},returns:v.null(),handler:asy
   }
   return null;
 }});
+
+// Wipes all store content so the shop can start fresh. Settings (store name,
+// admin emails, delivery fees) and notification subscriptions are kept, so
+// you stay signed in as an administrator. Internal: it can only be run by
+// someone with deploy access, via `npx convex run`. Dry run unless
+// confirm is exactly "DELETE ALL STORE DATA". Re-run if `remaining` > 0.
+const WIPE_TABLES = ["orders", "products", "categories", "collections", "coupons", "offers", "sales", "activity"] as const;
+export const wipeStoreData = internalMutation({
+  args: { confirm: v.optional(v.string()) },
+  returns: v.array(v.object({ table: v.string(), deleted: v.number(), remaining: v.number() })),
+  handler: async (ctx, { confirm }) => {
+    const apply = confirm === "DELETE ALL STORE DATA";
+    const report = [];
+    let budget = 3000; // stay well inside Convex's per-mutation write limit
+    for (const table of WIPE_TABLES) {
+      const rows = await ctx.db.query(table).take(4000);
+      let deleted = 0;
+      if (apply) {
+        for (const row of rows) {
+          if (budget-- <= 0) break;
+          await ctx.db.delete(row._id);
+          deleted++;
+        }
+      }
+      report.push({ table, deleted, remaining: rows.length - deleted });
+    }
+    return report;
+  },
+});

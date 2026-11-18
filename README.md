@@ -40,6 +40,18 @@ For uploads, deploy `npx wrangler deploy -c api/wrangler.jsonc`. `CONVEX_URL` ta
 
 The manifest and service worker allow installation and handle background push. Signed-in administrators can enable notifications in Settings or Notifications. Permission is requested only after tapping Enable. Configure `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` on each backend. New checkout orders schedule a server-side push; expired subscriptions are removed. On iPhone, install to the Home Screen first. No private pages or API responses are cached offline.
 
+## Start fresh (wipe all store data)
+
+Removes every order, product, category, collection, discount code, offer, sale and activity entry. Settings (store name, admin emails, delivery fees) are kept, so administrators keep access. Back up first:
+
+```sh
+npx convex export --prod --path .backups/before-wipe.zip
+npx convex run maintenance:wipeStoreData --prod                                   # dry run: shows what would be deleted
+npx convex run maintenance:wipeStoreData '{"confirm":"DELETE ALL STORE DATA"}' --prod
+```
+
+Run the last command again if any table still reports `remaining` above 0.
+
 ## Seed cleanup
 
 Back up with `npx convex export --path .backups/dev.zip` or add `--prod` for production. Run `node scripts/cleanup-seeds.mjs` for a dry run, then add `--apply` to remove only matching original seed records. Add `--prod` to target production. Cleanup is idempotent and preserves nonseed orders, including their historical product names and prices. No seeds run on startup. Backups and environment secrets are ignored by git.

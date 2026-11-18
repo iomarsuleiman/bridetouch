@@ -196,3 +196,15 @@ test("deleting a product keeps order history and never reuses its number",async(
  expect((await t.query(api.products.list,{})).find(p=>p._id===next)!.number).toBeGreaterThan(tiara.number);
  const orders=await admin.query(api.orders.list,{});expect(orders.find(o=>o._id===order!._id)?.items[0].name).toBe("Real piece");
 });
+
+test("wiping store data needs the exact confirmation and keeps settings",async()=>{
+ const t=await setup();
+ await t.mutation(api.orders.createCheckout,{...customer});
+ const dry=await t.mutation(internal.maintenance.wipeStoreData,{});
+ expect(dry.find(r=>r.table==="products")).toEqual({table:"products",deleted:0,remaining:1});
+ const done=await t.mutation(internal.maintenance.wipeStoreData,{confirm:"DELETE ALL STORE DATA"});
+ expect(done.every(r=>r.remaining===0)).toBe(true);
+ expect(await t.query(api.products.list,{})).toHaveLength(0);
+ expect((await t.query(api.settings.get,{}))?.storeName).toBe("bridetouch");
+ expect(await t.withIdentity({subject:"owner",email:"owner@example.com"}).query(api.access.current,{})).toBe(true);
+});
