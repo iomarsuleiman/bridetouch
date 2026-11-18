@@ -1,3 +1,4 @@
+import { friendlyError } from "../lib/format";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -24,7 +25,7 @@ export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
       setNewCategory("");
       toast("Category created");
     } catch (error) {
-      toast(error instanceof Error ? error.message : "Could not save category");
+      toast(friendlyError(error, "Could not save category"));
     } finally {
       setCreating(null);
     }
@@ -42,7 +43,7 @@ export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
       await add({ name, image: products.find((product) => product.img)?.img ?? "", productNumbers: products.map((product) => product.number) });
       toast("Collection created");
     } catch (error) {
-      toast(error instanceof Error ? error.message : "Could not create collection");
+      toast(friendlyError(error, "Could not create collection"));
     } finally {
       setCreating(null);
     }

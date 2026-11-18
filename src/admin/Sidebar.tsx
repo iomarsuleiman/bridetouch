@@ -83,7 +83,7 @@ export function Sidebar({
       </div>
       <div className="sidebar-foot">
         <button className="store-switch" onClick={() => navigate("shop")}>
-          <span className="avatar">m</span>
+          <span className="avatar">{(storeName.trim()[0] ?? "b").toUpperCase()}</span>
           <span style={{ flex: 1, minWidth: 0 }}>
             <strong>{storeName}</strong>
             <small>View storefront</small>

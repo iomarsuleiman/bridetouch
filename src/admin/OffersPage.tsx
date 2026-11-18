@@ -3,13 +3,15 @@ import { api } from "../../convex/_generated/api";
 import { Badge } from "../components/Badge";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
-import { Heading } from "./shared";
+import { DeleteButton, Heading } from "./shared";
+import { friendlyError } from "../lib/format";
 import type { AdminCtx } from "./types";
 
 // Port of the vanilla offersPage().
 export function OffersPage({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
   const toggle = useMutation(api.offers.toggle);
+  const remove = useMutation(api.offers.remove);
 
   return (
     <>
@@ -22,7 +24,7 @@ export function OffersPage({ ctx }: { ctx: AdminCtx }) {
           </button>
         }
       />
-      {!ctx.offers.length ? <div className="empty">No campaigns yet.</div> : null}
+      {!ctx.offers.length ? <div className="empty">No offers yet. Active offers show in the banner at the top of your shop.</div> : null}
       <div className="card-list">
         {ctx.offers.map((o) => (
           <article key={o._id} className="offer-card">
@@ -39,10 +41,11 @@ export function OffersPage({ ctx }: { ctx: AdminCtx }) {
               </button>
               <button
                 className="btn small secondary"
-                onClick={async () => { try { await toggle({id:o._id}); toast("Offer updated"); } catch { toast("Could not update offer"); } }}
+                onClick={async () => { try { await toggle({id:o._id}); toast(o.active ? "Offer paused" : "Offer activated"); } catch (e) { toast(friendlyError(e, "Could not update offer")); } }}
               >
                 {o.active ? "Pause" : "Activate"}
               </button>
+              <DeleteButton label="" onDelete={async () => { try { await remove({ id: o._id }); toast("Offer deleted"); } catch (e) { toast(friendlyError(e, "Could not delete offer")); } }} />
             </div>
           </article>
         ))}

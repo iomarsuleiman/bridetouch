@@ -182,3 +182,17 @@ test("cancelling an order restocks it and reopening takes the stock again",async
  await t.mutation(api.orders.createCheckout,{...customer,items:[{number:1,qty:3}]});
  await expect(admin.mutation(api.orders.updateStatus,{id:order!._id,status:"New"})).rejects.toThrow("Only 0 left");
 });
+
+test("deleting a product keeps order history and never reuses its number",async()=>{
+ const t=await setup();
+ const admin=t.withIdentity({subject:"owner",email:"owner@example.com"});
+ const order=await t.mutation(api.orders.createCheckout,{...customer});
+ const id=await admin.mutation(api.products.add,{name:"Tiara",category:"Bridal",price:900,stock:1});
+ const tiara=(await t.query(api.products.list,{})).find(p=>p._id===id)!;
+ await expect(t.mutation(api.products.remove,{id})).rejects.toThrow("Administrator");
+ await admin.mutation(api.products.remove,{id});
+ expect((await t.query(api.products.list,{})).some(p=>p._id===id)).toBe(false);
+ const next=await admin.mutation(api.products.add,{name:"Veil",category:"Bridal",price:400,stock:1});
+ expect((await t.query(api.products.list,{})).find(p=>p._id===next)!.number).toBeGreaterThan(tiara.number);
+ const orders=await admin.query(api.orders.list,{});expect(orders.find(o=>o._id===order!._id)?.items[0].name).toBe("Real piece");
+});

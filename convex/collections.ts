@@ -31,3 +31,13 @@ export const update = mutation({
     return null;
   },
 });
+
+export const remove = mutation({
+  args: { id: v.id("collections") },
+  returns: v.null(),
+  handler: async (ctx, { id }) => {
+    await requireAdmin(ctx);
+    if (await ctx.db.get(id)) await ctx.db.delete(id);
+    return null;
+  },
+});

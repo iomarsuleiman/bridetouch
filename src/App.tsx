@@ -13,10 +13,6 @@ const AdminApp = lazy(() => import("./admin/AdminApp"));
 export default function App() {
   const route = useHashRoute();
 
-  useEffect(() => {
-    if (route.area === "admin") document.title = "Dashboard · bridetouch";
-  }, [route.area]);
-
   // New pages start at the top; an instant jump avoids a long animated scroll
   // through the previous page.
   useEffect(() => {

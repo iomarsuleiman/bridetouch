@@ -9,6 +9,7 @@ import { linkHandler, navigate, type StoreView } from "../hooks/useHashRoute";
 import { NotFoundPage } from "./NotFoundPage";
 import { StoreSkeleton } from "./StoreSkeleton";
 import { useScrollReveal } from "../lib/reveal";
+import { useScrollLock } from "../hooks/useScrollLock";
 import { StoreUIProvider, type StoreUI } from "./ui";
 import { PromoBanner } from "./PromoBanner";
 import { HomePage } from "./HomePage";
@@ -65,13 +66,8 @@ export default function Storefront({ route }: { route: StoreRoute }) {
     setMobileNav(false);
   }, [route]);
 
-  // Vanilla render() locks body scroll while the cart sheet is open.
-  useEffect(() => {
-    document.body.style.overflow = cartOpen ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [cartOpen]);
+  // Lock the page behind the bag and the mobile menu (works on iOS too).
+  useScrollLock(cartOpen || mobileNav);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

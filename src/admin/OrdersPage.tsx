@@ -17,7 +17,7 @@ export function OrdersPage({ ctx }: { ctx: AdminCtx }) {
     (o) =>
       (tab === "All" || o.status === tab) &&
       (filter === "All" || o.payment === filter) &&
-      (!query || (String(o.number) + " " + o.customer).toLowerCase().includes(query.toLowerCase())),
+      (!query.trim() || ("BT-" + o.number + " " + o.number + " " + o.customer + " " + o.phone + " 0" + o.phone + " " + o.city).toLowerCase().includes(query.trim().toLowerCase())),
   );
 
   return (
@@ -41,7 +41,7 @@ export function OrdersPage({ ctx }: { ctx: AdminCtx }) {
               className={"tab" + (tab === t ? " active" : "")}
               onClick={() => setTab(t)}
             >
-              {t}
+              {t}{t !== "All" && ctx.orders.some((o) => o.status === t) ? <span className="tab-count">{ctx.orders.filter((o) => o.status === t).length}</span> : null}
             </button>
           ))}
         </div>
@@ -49,8 +49,11 @@ export function OrdersPage({ ctx }: { ctx: AdminCtx }) {
           <div className="search">
             <Icon name="search" size="sm" />
             <input
+              type="search"
+              enterKeyHint="search"
+              autoComplete="off"
               aria-label="Search orders"
-              placeholder="Search orders"
+              placeholder="Search order #, name, phone"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -61,8 +64,9 @@ export function OrdersPage({ ctx }: { ctx: AdminCtx }) {
               className="btn secondary"
               type="button"
               onClick={() => {
-                exportOrders(ctx.orders);
-                toast("CSV exported");
+                if (!filtered.length) { toast("No orders to export"); return; }
+                exportOrders(filtered);
+                toast(`${filtered.length} ${filtered.length === 1 ? "order" : "orders"} exported`);
               }}
             >
               <Icon name="download" size="sm" /> Export

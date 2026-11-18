@@ -111,8 +111,11 @@ export const add = mutation({
       .withIndex("by_number")
       .order("desc")
       .first();
+    const settings = await ctx.db.query("settings").first();
+    const number = Math.max(max?.number ?? 0, settings?.lastProductNumber ?? 0) + 1;
+    if (settings) await ctx.db.patch(settings._id, { lastProductNumber: number });
     return await ctx.db.insert("products", {
-      number: (max?.number ?? 0) + 1,
+      number,
       tag: "New",
       color: options[0]?.values[0] ?? "Original",
       name: args.name.trim(),
@@ -161,6 +164,26 @@ export const update = mutation({
       options: options.length ? options : undefined,
       variants,
     });
+    return null;
+  },
+});
+
+// Past orders keep their own copy of name and price, so removing a product
+// never changes order history or receipts.
+export const remove = mutation({
+  args: { id: v.id("products") },
+  returns: v.null(),
+  handler: async (ctx, { id }) => {
+    await requireAdmin(ctx);
+    const product = await ctx.db.get(id);
+    if (!product) return null;
+    await ctx.db.delete(id);
+    const collections = await ctx.db.query("collections").take(500);
+    for (const collection of collections) {
+      if (collection.productNumbers?.includes(product.number)) {
+        await ctx.db.patch(collection._id, { productNumbers: collection.productNumbers.filter((n) => n !== product.number) });
+      }
+    }
     return null;
   },
 });

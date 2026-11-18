@@ -142,6 +142,8 @@ export function CheckoutPage({
                 name="name"
                 required
                 autoComplete="name"
+                autoCapitalize="words"
+                enterKeyHint="next"
                 maxLength={200}
                 placeholder="Your name"
                 value={name}
@@ -154,8 +156,10 @@ export function CheckoutPage({
                 id="customerPhone"
                 name="phone"
                 required
+                type="tel"
                 inputMode="tel"
                 autoComplete="tel"
+                enterKeyHint="next"
                 placeholder="01xxxxxxxxx"
                 value={phone}
                 aria-invalid={phoneTouched && !phoneValid}
@@ -179,6 +183,7 @@ export function CheckoutPage({
                 name="city"
                 required
                 autoComplete="address-level2"
+                enterKeyHint="next"
                 maxLength={120}
                 placeholder="Cairo, Maadi"
                 value={city}
@@ -192,6 +197,7 @@ export function CheckoutPage({
                 name="street"
                 required
                 autoComplete="address-line1"
+                enterKeyHint="next"
                 maxLength={300}
                 placeholder="Street name"
                 value={street}
@@ -206,6 +212,7 @@ export function CheckoutPage({
               name="address"
               required
               autoComplete="address-line2"
+              enterKeyHint="next"
               maxLength={300}
               placeholder="Building, floor, apartment"
               value={address}

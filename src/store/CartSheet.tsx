@@ -172,6 +172,9 @@ export function CartSheet({
                         id="couponInput"
                         placeholder="Enter code"
                         autoCapitalize="characters"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        enterKeyHint="go"
                         autoComplete="off"
                         value={couponInput}
                         onChange={(e) => onCouponInputChange(e.target.value)}

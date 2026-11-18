@@ -1,3 +1,5 @@
+import { friendlyError } from "../lib/format";
+import { DeleteButton } from "./shared";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Badge } from "../components/Badge";
@@ -20,6 +22,7 @@ function fmt(ms: number) {
 export function SalesPage({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
   const toggle = useMutation(api.sales.toggle);
+  const remove = useMutation(api.sales.remove);
   const now = Date.now();
 
   return (
@@ -34,7 +37,7 @@ export function SalesPage({ ctx }: { ctx: AdminCtx }) {
         }
       />
       <div className="card-list">
-        {ctx.sales.map((s) => {
+        {[...ctx.sales].sort((a, b) => b.endsAt - a.endsAt).map((s) => {
           const running = s.active && s.startsAt <= now && now <= s.endsAt;
           const upcoming = s.active && s.startsAt > now;
           return (
@@ -53,15 +56,16 @@ export function SalesPage({ ctx }: { ctx: AdminCtx }) {
               <div className="bottom">
                 <button
                   className="btn small secondary"
-                  onClick={async () => { try { await toggle({id:s._id}); toast("Sale updated"); } catch { toast("Could not update sale"); } }}
+                  onClick={async () => { try { await toggle({id:s._id}); toast(s.active ? "Sale paused" : "Sale activated"); } catch (e) { toast(friendlyError(e, "Could not update sale")); } }}
                 >
                   {s.active ? "Pause" : "Activate"}
                 </button>
+                <DeleteButton onDelete={async () => { try { await remove({ id: s._id }); toast("Sale deleted"); } catch (e) { toast(friendlyError(e, "Could not delete sale")); } }} />
               </div>
             </article>
           );
         })}
-        {!ctx.sales.length ? <div className="empty">No sales yet — create your first one.</div> : null}
+        {!ctx.sales.length ? <div className="empty">No sales yet. Create one to discount products for a set time.</div> : null}
       </div>
     </>
   );
