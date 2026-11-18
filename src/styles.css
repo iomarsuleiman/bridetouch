@@ -555,3 +555,20 @@ a.mobile-data{color:inherit;text-decoration:none}
 .mobile-product-row{display:flex;align-items:center;border-top:1px solid #ecf0e9;padding-right:8px}
 .mobile-product-row .mobile-data{border-top:0}
 .mobile-product-row>.btn{flex:none}
+
+/* Mobile header + menu: solid surface so page images don't bleed through
+   the blur (it looked muddy over photos), and a cleaner slide-down menu. */
+@media(max-width:900px){
+  .store-header{background:rgba(250,249,245,.96);-webkit-backdrop-filter:saturate(1.2) blur(12px);backdrop-filter:saturate(1.2) blur(12px)}
+  .store-header.menu-open{background:#fffefa;-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none;border-bottom-color:#efeee7}
+  .store-header .store-nav.open{background:#fffefa;padding:6px 16px 18px;border-top:0;box-shadow:0 24px 40px -12px #1a2a1f33;animation:menuDown .28s var(--ease-out) both;max-height:calc(100dvh - 64px);overflow:auto;overscroll-behavior:contain}
+  .store-nav.open>a{position:relative;padding:15px 12px;font-size:17px;font-weight:600;color:#3e4a40;border-top:1px solid #f0efe8;border-radius:0}
+  .store-nav.open>a:first-child{border-top:0}
+  .store-nav.open>a.active{color:#233f30}
+  .store-nav.open>a.active:before{content:'';position:absolute;left:0;top:50%;width:3px;height:20px;margin-top:-10px;border-radius:3px;background:#cb887a}
+  .store-nav.open>a:active{background:#f5f3ec}
+  .store-nav.open .store-nav-social{padding:14px 4px 0;border-top:1px solid #f0efe8;margin-top:4px;gap:10px}
+  .store-nav.open .store-nav-social a{width:44px;height:44px}
+  .store-menu-scrim{background:#18281e40;animation:fadeIn .25s both}
+}
+@keyframes menuDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
