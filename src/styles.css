@@ -552,3 +552,6 @@ a.mobile-data{color:inherit;text-decoration:none}
   .settings-savebar{margin:0 -4px}
   .status-track button{flex:1 1 auto}
 }
+.mobile-product-row{display:flex;align-items:center;border-top:1px solid #ecf0e9;padding-right:8px}
+.mobile-product-row .mobile-data{border-top:0}
+.mobile-product-row>.btn{flex:none}

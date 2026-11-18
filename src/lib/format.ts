@@ -36,6 +36,7 @@ export function formatOrderDate(value: string) {
 export function friendlyError(error: unknown, fallback = "Something went wrong. Please try again.") {
   const raw = error instanceof Error ? error.message : typeof error === "string" ? error : "";
   if (!raw) return fallback;
+  if (/Could not find public function/i.test(raw)) return "This needs a backend update. Run `npx convex deploy`, then try again.";
   if (/failed to fetch|network|connection/i.test(raw)) return "We couldn't reach the shop. Check your connection and try again.";
   const match = raw.match(/Uncaught Error:\s*([^\n]+?)(?:\s+at\s+\S+\s*\(|\n|$)/);
   const message = (match ? match[1] : raw.replace(/^\[CONVEX[^\]]*\]\s*(\[Request ID:[^\]]*\]\s*)?/, "")).trim();
