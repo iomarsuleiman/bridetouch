@@ -12,7 +12,7 @@
   ],
   "vars": {
     "CLERK_ISSUER": "https://humane-satyr-4557.clerk.accounts.dev",
-    "ALLOWED_ORIGINS": "http://localhost:5173,https://melo-handmade-baseline.omaarsuliiman.workers.dev",
+    "ALLOWED_ORIGINS": "http://localhost:5173,https://melo-handmade-baseline.omaarsuliiman.workers.dev,https://bridetouch.vercel.app",
     "CONVEX_URL": "https://resilient-snake-473.eu-west-1.convex.cloud",
     "DEV_CONVEX_URL": "https://groovy-marlin-763.eu-west-1.convex.cloud"
   }
