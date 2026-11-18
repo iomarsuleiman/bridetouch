@@ -1,3 +1,4 @@
+import { friendlyError } from "../lib/format";
 import { NotificationSetup } from "../components/NotificationSetup";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
@@ -624,9 +625,9 @@ function OrderDetailModal({
               : undefined;
     try {
       await updateStatus({ id: order._id, status: s, delivery });
-      toast("Order marked " + s);
-    } catch {
-      toast("Could not update order");
+      toast(s === "Cancelled" ? "Order cancelled · items returned to stock" : "Order marked " + s);
+    } catch (error) {
+      toast(friendlyError(error, "Could not update order"));
     }
   }
 
@@ -641,7 +642,7 @@ function OrderDetailModal({
 
   return (
     <ModalShell
-      title={"Order #ML-" + order.number}
+      title={"Order #BT-" + order.number}
       large
       onClose={onClose}
       footer={
@@ -838,7 +839,7 @@ function NotificationsModal({
           style={{ textAlign: "left", width: "100%" }}
           onClick={() => onOpenOrder(o._id)}
         >
-          <strong style={{ fontSize: 12 }}>New order #ML-{o.number}</strong>
+          <strong style={{ fontSize: 12 }}>New order #BT-{o.number}</strong>
           <div className="form-help">
             {o.customer} · {money(o.total)}
           </div>

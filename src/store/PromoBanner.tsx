@@ -34,8 +34,12 @@ export function PromoBanner() {
     return (
       <div className="demo-banner">
         <Icon name="sparkle" size="sm" />
-        {sale.name} · {sale.percentOff}% off {sale.scope === "products" ? "selected products" : sale.scope === "collections" ? "selected collections" : "everything"} at checkout
-        <span className="light banner-clock">· {countdown(sale.endsAt - now)} left</span>
+        <span>
+          <strong>{sale.name}</strong>
+          {sale.name.includes(`${sale.percentOff}%`) ? " · " : ` · ${sale.percentOff}% off `}
+          {sale.scope === "products" ? "selected pieces" : sale.scope === "collections" ? "selected collections" : "everything"}
+        </span>
+        <span className="light banner-clock" aria-hidden="true">· ends in {countdown(sale.endsAt - now)}</span>
         <button type="button" onClick={() => goToCategory("All")}>
           Shop the sale <Icon name="arrow" size="sm" />
         </button>

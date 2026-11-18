@@ -78,7 +78,7 @@ export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
                       <img src={p.img} alt="" />
                       <span>
                         <strong>{p.name}</strong>
-                        <small>SKU · ML-{String(p.number).padStart(3, "0")}</small>
+                        <small>SKU · BT-{String(p.number).padStart(3, "0")}</small>
                       </span>
                     </div>
                   </td>

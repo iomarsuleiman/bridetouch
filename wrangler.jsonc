@@ -4,6 +4,10 @@
   "main": "worker.js",
   "compatibility_date": "2026-11-16",
   "workers_dev": true,
+  // Used to build per-page SEO tags and /sitemap.xml from the live catalog.
+  "vars": {
+    "CONVEX_URL": "https://resilient-snake-473.eu-west-1.convex.cloud"
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

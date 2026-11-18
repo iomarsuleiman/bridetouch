@@ -55,7 +55,7 @@ export function printOrder(
   const productName = (number: number) =>
     products.find((p) => p.number === number)?.name ?? "Product";
   const text =
-    "BRIDETOUCH | ORDER #ML-" +
+    "BRIDETOUCH | ORDER #BT-" +
     o.number +
     "\n\nCustomer: " +
     o.customer +
@@ -76,7 +76,7 @@ export function printOrder(
   if (print) {
     print.opener = null;
     print.document.write(
-      '<!doctype html><html><head><title>Order #ML-' +
+      '<!doctype html><html><head><title>Order #BT-' +
         o.number +
         '</title><style>body{font:14px/1.8 system-ui;padding:45px;white-space:pre-wrap;color:#263b29}</style></head><body>' +
         escapeHTML(text) +

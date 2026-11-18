@@ -1,11 +1,13 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { SignInButton, useAuth } from "@clerk/react";
 import type { Doc } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
-import { money, normalizePhone } from "../lib/format";
+import { friendlyError, money, normalizePhone } from "../lib/format";
+import { useSeo } from "../lib/seo";
+import { SmartImage } from "../components/SmartImage";
 import { cartItemKey, useCart } from "../lib/cart";
-import { priceForVariant, variantLabel } from "./productVariants";
+import { availableStock, priceForVariant, variantLabel } from "./productVariants";
 import { checkoutDiscount } from "./salePricing";
 import { useToast } from "../components/Toast";
 import { Icon } from "../components/Icon";
@@ -32,15 +34,31 @@ export function CheckoutPage({
   const createCheckout = useMutation(api.orders.createCheckout);
   const { userId } = useAuth();
 
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [city, setCity] = useState("");
-  const [street, setStreet] = useState("");
-  const [address, setAddress] = useState("");
+  useSeo({ title: "Checkout", noindex: true }, settings.storeName);
+
+  // Returning customers don't retype their details (kept on this device only).
+  const [saved] = useState(readSavedDetails);
+  const [name, setName] = useState(saved.name ?? "");
+  const [phone, setPhone] = useState(saved.phone ?? "");
+  const [city, setCity] = useState(saved.city ?? "");
+  const [street, setStreet] = useState(saved.street ?? "");
+  const [address, setAddress] = useState(saved.address ?? "");
   const [notes, setNotes] = useState("");
+  const [remember, setRemember] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  const phoneValid = /^1[0125][0-9]{8}$/.test(normalizePhone(phone));
+
+  useEffect(() => setError(""), [name, phone, city, street, address]);
 
   const byNumber = (number: number) => products.find((p) => p.number === number);
+  const stockProblems = cart.items.flatMap((item) => {
+    const product = byNumber(item.number);
+    if (!product) return [];
+    const available = availableStock(product, item.variant);
+    return item.qty > available ? [{ item, product, available }] : [];
+  });
 
   const lines = cart.items.flatMap((item) => {
     const product = byNumber(item.number);
@@ -53,36 +71,56 @@ export function CheckoutPage({
 
   if (!cart.items.length) {
     return (
-      <div className="empty" style={{ padding: "120px 20px" }}>
+      <div className="empty checkout-empty">
+        <Icon name="bag" size="xl" />
         <h3>Your bag is empty.</h3>
+        <p>Add a few pieces you love, then come back here to check out.</p>
         <button className="btn primary" onClick={() => goToCategory("All")}>
-          Continue shopping
+          Start shopping <Icon name="arrow" size="sm" />
         </button>
       </div>
     );
   }
 
-  if (settings.guestCheckout === false && !userId) return <div className="empty"><h3>Sign in to place your order</h3><SignInButton mode="modal"><button className="btn primary">Sign in</button></SignInButton></div>;
+  if (settings.guestCheckout === false && !userId) return <div className="empty checkout-empty"><Icon name="users" size="xl" /><h3>Sign in to place your order</h3><p>Your bag is saved. Sign in to finish checking out.</p><SignInButton mode="modal"><button className="btn primary">Sign in</button></SignInButton></div>;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (submitting) return;
+    if (!phoneValid) {
+      setPhoneTouched(true);
+      document.getElementById("customerPhone")?.focus();
+      return;
+    }
+    if (stockProblems.length) {
+      setError("Some pieces in your bag are no longer available in that quantity. Update your bag to continue.");
+      return;
+    }
     setSubmitting(true);
+    setError("");
     try {
       const order = await createCheckout({
         customer: name,
         phone: normalizePhone(phone),
         city,
-        address: [street, address, city].filter(Boolean).join(", "),
-        notes: notes || undefined,
+        address: [street.trim(), address.trim(), city.trim()].filter(Boolean).join(", "),
+        notes: notes.trim() || undefined,
         items: cart.items.map((i) => ({ number: i.number, qty: i.qty, variant: i.variant })),
         couponCode: appliedCoupon?.code,
         userId: userId ?? undefined,
       });
       if (!order) throw new Error("Order could not be created");
+      try {
+        if (remember) localStorage.setItem(DETAILS_KEY, JSON.stringify({ name, phone: normalizePhone(phone), city, street, address }));
+        else localStorage.removeItem(DETAILS_KEY);
+      } catch {
+        // storage blocked
+      }
       onOrderPlaced(order);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Something went wrong");
+      const message = friendlyError(err, "We couldn't place your order. Please try again.");
+      setError(message);
+      toast(message);
     } finally {
       setSubmitting(false);
     }
@@ -91,11 +129,11 @@ export function CheckoutPage({
   return (
     <div className="shop-checkout">
       <div>
-        <button className="mini-breadcrumb" onClick={openCart}>
+        <button type="button" className="mini-breadcrumb back-link" onClick={openCart}>
           <Icon name="back" size="sm" /> Back to bag
         </button>
         <h1>One last thing.</h1>
-        <form className="checkout-form" onSubmit={submit}>
+        <form className="checkout-form" onSubmit={submit} noValidate={false} aria-describedby={error ? "checkout-error" : undefined}>
           <div className="grid-2">
             <div className="field">
               <label htmlFor="customerName">Full name</label>
@@ -104,6 +142,7 @@ export function CheckoutPage({
                 name="name"
                 required
                 autoComplete="name"
+                maxLength={200}
                 placeholder="Your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -118,11 +157,18 @@ export function CheckoutPage({
                 inputMode="tel"
                 autoComplete="tel"
                 placeholder="01xxxxxxxxx"
-                pattern="0?1[0-9]{9}"
                 value={phone}
+                aria-invalid={phoneTouched && !phoneValid}
+                aria-describedby="phone-hint"
                 onChange={(e) => setPhone(e.target.value)}
-                onBlur={() => setPhone((p) => (p ? normalizePhone(p) : p))}
+                onBlur={() => {
+                  setPhoneTouched(!!phone);
+                  if (phone && /^1[0125][0-9]{8}$/.test(normalizePhone(phone))) setPhone("0" + normalizePhone(phone));
+                }}
               />
+              <small id="phone-hint" className={"field-hint" + (phoneTouched && !phoneValid ? " error" : "")}>
+                {phoneTouched && !phoneValid ? "Enter an 11-digit Egyptian mobile number, e.g. 010 1234 5678." : "We'll call to confirm delivery."}
+              </small>
             </div>
           </div>
           <div className="grid-2">
@@ -132,6 +178,8 @@ export function CheckoutPage({
                 id="customerCity"
                 name="city"
                 required
+                autoComplete="address-level2"
+                maxLength={120}
                 placeholder="Cairo, Maadi"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
@@ -143,6 +191,8 @@ export function CheckoutPage({
                 id="customerStreet"
                 name="street"
                 required
+                autoComplete="address-line1"
+                maxLength={300}
                 placeholder="Street name"
                 value={street}
                 onChange={(e) => setStreet(e.target.value)}
@@ -155,6 +205,8 @@ export function CheckoutPage({
               id="customerAddress"
               name="address"
               required
+              autoComplete="address-line2"
+              maxLength={300}
               placeholder="Building, floor, apartment"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
@@ -168,7 +220,8 @@ export function CheckoutPage({
               id="customerNotes"
               name="notes"
               rows={3}
-              placeholder="Anything we should know?"
+              maxLength={1000}
+              placeholder="Landmark, preferred delivery time, gift message…"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
@@ -183,22 +236,54 @@ export function CheckoutPage({
             </div>
             <Icon name="check" size="sm" />
           </div>
-          <button className="btn primary" style={{ padding: 16 }} type="submit" disabled={submitting}>
-            Place order · {money(total)} <Icon name="arrow" size="sm" />
+          <label className="remember-row">
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            <span>Remember my details on this device</span>
+          </label>
+          {stockProblems.length ? (
+            <div className="form-alert" role="alert">
+              <Icon name="info" size="sm" />
+              <div>
+                <strong>Some pieces just sold out.</strong>
+                <ul>
+                  {stockProblems.map(({ item, product, available }) => (
+                    <li key={cartItemKey(item)}>
+                      {product.name}{variantLabel(product, item.variant) ? ` (${variantLabel(product, item.variant)})` : ""}: {available ? `only ${available} left` : "sold out"}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  className="text-link"
+                  onClick={() => stockProblems.forEach(({ item, product, available }) => cart.setQty(product.number, available, item.variant))}
+                >
+                  Update my bag
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {error && !stockProblems.length ? (
+            <div className="form-alert" role="alert" id="checkout-error">
+              <Icon name="info" size="sm" />
+              <div>{error}</div>
+            </div>
+          ) : null}
+          <button className={"btn primary place-order" + (submitting ? " is-loading" : "")} type="submit" disabled={submitting || !!stockProblems.length} aria-busy={submitting}>
+            {submitting ? <><span className="spinner" aria-hidden="true" /> Placing your order…</> : <>Place order · {money(total)} <Icon name="arrow" size="sm" /></>}
           </button>
-          <small style={{ color: "#9b9f95" }}>
-            Your order will be submitted. Payment is collected on delivery.
+          <small className="muted">
+            By placing your order you agree to pay {money(total)} in cash when it arrives. We'll call to confirm before shipping.
           </small>
         </form>
       </div>
       <aside className="summary-card">
-        <h3>Your order · {cart.count} items</h3>
+        <h3>Your order · {cart.count} {cart.count === 1 ? "item" : "items"}</h3>
         {cart.items.map((it) => {
           const p = byNumber(it.number);
           if (!p) return null;
           return (
             <div className="line-item" style={{ alignItems: "center" }} key={cartItemKey(it)}>
-              <img style={{ width: 56, height: 65 }} src={p.img ?? ""} alt="" />
+              <SmartImage style={{ width: 56, height: 65 }} src={p.img} alt="" />
               <div className="li-info">
                 <strong>{p.name}</strong>
                 <small>{variantLabel(p, it.variant) ? `${variantLabel(p, it.variant)} · ` : ""}Qty {it.qty}</small>
@@ -228,4 +313,14 @@ export function CheckoutPage({
       </aside>
     </div>
   );
+}
+
+const DETAILS_KEY = "bridetouch-checkout-details";
+type SavedDetails = { name?: string; phone?: string; city?: string; street?: string; address?: string };
+function readSavedDetails(): SavedDetails {
+  try {
+    return JSON.parse(localStorage.getItem(DETAILS_KEY) || "{}") ?? {};
+  } catch {
+    return {};
+  }
 }

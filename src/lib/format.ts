@@ -30,3 +30,15 @@ export function formatOrderDate(value: string) {
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
+
+/** Convex wraps server errors as "[CONVEX M(...)] [Request ID: …] Server Error
+ *  Uncaught Error: <message> at handler (…)". Show customers just <message>. */
+export function friendlyError(error: unknown, fallback = "Something went wrong. Please try again.") {
+  const raw = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  if (!raw) return fallback;
+  if (/failed to fetch|network|connection/i.test(raw)) return "We couldn't reach the shop. Check your connection and try again.";
+  const match = raw.match(/Uncaught Error:\s*([^\n]+?)(?:\s+at\s+\S+\s*\(|\n|$)/);
+  const message = (match ? match[1] : raw.replace(/^\[CONVEX[^\]]*\]\s*(\[Request ID:[^\]]*\]\s*)?/, "")).trim();
+  if (!message || /^Server Error$/i.test(message)) return fallback;
+  return message;
+}
