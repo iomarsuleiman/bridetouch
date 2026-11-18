@@ -40,3 +40,13 @@ export const toggle = mutation({
     await ctx.db.patch(id, { active: !offer.active });
   },
 });
+
+export const remove = mutation({
+  args: { id: v.id("offers") },
+  returns: v.null(),
+  handler: async (ctx, { id }) => {
+    await requireAdmin(ctx);
+    if (await ctx.db.get(id)) await ctx.db.delete(id);
+    return null;
+  },
+});

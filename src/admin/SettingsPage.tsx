@@ -1,3 +1,4 @@
+import { friendlyError } from "../lib/format";
 import { NotificationSetup } from "../components/NotificationSetup";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
@@ -59,18 +60,46 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
   const [navigation, setNavigation] = useState<string[]>(() => s.navigation ?? [...new Set(ctx.products.map((p) => p.category))].slice(0, 2));
   const formRef = useRef<HTMLFormElement>(null);
 
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  async function toggleSetting(key: string, next: boolean) {
+    try {
+      await update({ [key]: next });
+      toast("Setting updated");
+    } catch (error) {
+      toast(friendlyError(error, "Could not update setting"));
+    }
+  }
+
   async function save() {
     const f = formRef.current;
     if (f && !f.checkValidity()) {
       f.reportValidity();
       return;
     }
+    if (!storeName.trim()) { toast("Enter a store name"); return; }
+    if (!Number.isFinite(Number(shippingFee)) || Number(shippingFee) < 0 || !Number.isFinite(Number(freeShippingMin)) || Number(freeShippingMin) < 0) {
+      toast("Delivery amounts must be 0 or more");
+      return;
+    }
+    if (saving) return;
+    setSaving(true);
     try {
       const instagramUrl = (socials.find((entry) => entry.network === "instagram")?.url ?? "").trim();
       await update({ storeName, email, city, shipping: Number(shippingFee), freeShippingMin: Number(freeShippingMin), ...content, instagramUrl, socials: socials.map((entry) => ({ ...entry, url: entry.url.trim() })), supportUrl, navigation: [...new Set(navigation.map((name) => name.trim()).filter(Boolean))] });
       toast("Settings saved");
-    } catch {
-      toast("Could not save settings");
+      setDirty(false);
+    } catch (error) {
+      toast(friendlyError(error, "Could not save settings"));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -86,8 +115,8 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
     try {
       await update({ freeShippingMin: value });
       toast("Free delivery threshold updated");
-    } catch {
-      toast("Could not update the threshold");
+    } catch (error) {
+      toast(friendlyError(error, "Could not update the threshold"));
       setFreeShippingMin(String(s.freeShippingMin ?? 800));
     }
   }
@@ -111,7 +140,7 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
       toast("Administrator access updated");
       return true;
     } catch (error) {
-      toast(error instanceof Error ? error.message : "Could not update administrators");
+      toast(friendlyError(error, "Could not update administrators"));
       return false;
     } finally {
       setSavingAdmins(false);
@@ -161,22 +190,23 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
         title="Settings"
         subtitle="Everything about your little shop."
         actions={
-          <button className="btn primary" type="button" onClick={save}>
-            <Icon name="check" size="sm" /> Save changes
+          <button className="btn primary" type="button" onClick={() => void save()} disabled={saving}>
+            {saving ? <><span className="spinner" aria-hidden="true" /> Saving…</> : <><Icon name="check" size="sm" /> Save changes</>}
           </button>
         }
       />
-      <form ref={formRef} className="settings-grid" onSubmit={(e) => e.preventDefault()}>
+      <form ref={formRef} className="settings-grid" onSubmit={(e) => { e.preventDefault(); void save(); }}
+        onChange={(e) => { if (!(e.target as HTMLElement).closest(".admin-add, .setting-row")) setDirty(true); }}>
         <section className="settings-card">
           <h2>Store details</h2>
           <p>Your storefront name and contact details.</p>
           <div className="field">
             <label htmlFor="sname">Store name</label>
-            <input id="sname" name="storeName" value={storeName} onChange={(e) => setStoreName(e.target.value)} />
+            <input id="sname" name="storeName" required maxLength={60} value={storeName} onChange={(e) => setStoreName(e.target.value)} />
           </div>
           <div className="field">
             <label htmlFor="semail">Contact email</label>
-            <input id="semail" type="email" name="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input id="semail" type="email" name="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div className="field">
             <label htmlFor="scity">Location</label>
@@ -185,7 +215,7 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
         </section>
         <section className="settings-card">
           <h2>Links & access</h2>
-          <div className="field"><label htmlFor="support">Support link</label><input id="support" placeholder="https://wa.me/? or mailto:you@example.com" value={supportUrl} onChange={e => setSupportUrl(e.target.value)} /></div>
+          <div className="field"><label htmlFor="support">Support link</label><input id="support" type="text" inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="https://wa.me/201xxxxxxxxx or mailto:you@example.com" value={supportUrl} onChange={e => setSupportUrl(e.target.value)} onBlur={e => setSupportUrl(withScheme(e.target.value))} /><small className="field-hint">Shown as “Support” in the header and footer. A WhatsApp link works well.</small></div>
           <div className="field admin-field">
             <label>Dashboard administrators</label>
             <p className="form-help">
@@ -218,6 +248,11 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
               <input
                 id="newAdmin"
                 type="email"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="done"
                 placeholder="name@example.com"
                 value={newAdmin}
                 onChange={(e) => setNewAdmin(e.target.value)}
@@ -262,8 +297,12 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
             </button>
           </div>
           {Object.entries(content).map(([key, value]) => {
-            const label = key.replace(/([A-Z])/g, " $1");
-            return key.endsWith("Image") ? <ImageUpload key={key} label={label} value={value} onChange={url => setContent(current => ({...current, [key]:url}))} /> : <div className="field" key={key}><label htmlFor={key}>{label}</label><input id={key} value={value} onChange={e => setContent(current => ({...current, [key]:e.target.value}))} /></div>;
+            const label = CONTENT_LABELS[key] ?? key;
+            const set = (next: string) => { setContent(current => ({...current, [key]:next})); setDirty(true); };
+            if (key.endsWith("Image")) return <ImageUpload key={key} label={label} value={value} onChange={set} />;
+            return <div className="field" key={key}><label htmlFor={key}>{label}</label>{key.endsWith("Description")
+              ? <textarea id={key} rows={3} maxLength={400} value={value} onChange={e => set(e.target.value)} />
+              : <input id={key} maxLength={key === "announcement" ? 160 : 120} value={value} placeholder={key === "announcement" ? "Optional, e.g. Orders placed today ship Sunday" : undefined} onChange={e => set(e.target.value)} />}</div>;
           })}
         </section>
         <section className="settings-card">
@@ -283,13 +322,17 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
                 </span>
                 <input
                   className="social-url"
-                  type="url"
+                  type="text"
                   inputMode="url"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   placeholder={placeholder}
                   aria-label={`${label} link`}
                   value={social.url}
                   disabled={!social.enabled}
                   onChange={(e) => updateSocial(network, { url: e.target.value })}
+                  onBlur={(e) => updateSocial(network, { url: withScheme(e.target.value) })}
                 />
                 <button
                   type="button"
@@ -311,11 +354,11 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
           <NotificationSetup />
           <div className="field">
             <label htmlFor="shippingFee">Standard delivery fee (EGP)</label>
-            <input id="shippingFee" name="shippingFee" type="number" min="0" step="0.01" required value={shippingFee} onChange={e => setShippingFee(e.target.value)} />
+            <input id="shippingFee" name="shippingFee" type="text" inputMode="decimal" autoComplete="off" required value={shippingFee} onChange={e => setShippingFee(e.target.value.replace(",", ".").replace(/[^0-9.]/g, ""))} />
           </div>
           <div className="field">
             <label htmlFor="freeShippingMin">Free delivery from (EGP)</label>
-            <input id="freeShippingMin" name="freeShippingMin" type="number" min="0" step="0.01" required value={freeShippingMin} onChange={e => setFreeShippingMin(e.target.value)} />
+            <input id="freeShippingMin" name="freeShippingMin" type="text" inputMode="decimal" autoComplete="off" required value={freeShippingMin} onChange={e => setFreeShippingMin(e.target.value.replace(",", ".").replace(/[^0-9.]/g, ""))} />
             <small>Set the amount here, then enable or disable free delivery below. Changes are saved with the other store settings.</small>
           </div>
           {TOGGLES.map((t) => (
@@ -325,10 +368,9 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
                   <strong className="setting-inline">
                     Free delivery from EGP
                     <input
-                      type="number"
-                      min={0}
-                      step={1}
+                      type="text"
                       inputMode="numeric"
+                      enterKeyHint="done"
                       value={freeShippingMin}
                       disabled={!s.freeShipping}
                       onChange={(e) => setFreeShippingMin(e.target.value)}
@@ -353,14 +395,43 @@ export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
                 aria-checked={!!s[t.key]}
                 aria-label={t.title(s.freeShippingMin)}
                 className={"toggle" + (s[t.key] ? " on" : "")}
-                onClick={() => update({ [t.key]: !s[t.key] })}
+                onClick={() => void toggleSetting(t.key, !s[t.key])}
               >
                 <i />
               </button>
             </div>
           ))}
         </section>
+        {dirty ? (
+          <div className="settings-savebar" role="status">
+            <span>You have unsaved changes</span>
+            <button className="btn primary" type="submit" disabled={saving}>
+              {saving ? <><span className="spinner" aria-hidden="true" /> Saving…</> : <>Save changes</>}
+            </button>
+          </div>
+        ) : null}
       </form>
     </>
   );
+}
+
+const CONTENT_LABELS: Record<string, string> = {
+  logoImage: "Logo",
+  heroTitle: "Homepage headline",
+  heroDescription: "Homepage intro",
+  heroImage: "Homepage image",
+  storyTitle: "Story title",
+  storyDescription: "Story text",
+  storyImage: "Story image",
+  catalogTitle: "Shop page title",
+  catalogDescription: "Shop page intro",
+  announcement: "Announcement bar",
+};
+
+/** "instagram.com/shop" → "https://instagram.com/shop"; mailto:/tel: links untouched. */
+function withScheme(value: string) {
+  const v = value.trim();
+  if (!v || /^[a-z][a-z0-9+.-]*:/i.test(v)) return v;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return "mailto:" + v;
+  return "https://" + v.replace(/^\/+/, "");
 }

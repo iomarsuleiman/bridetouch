@@ -117,7 +117,7 @@ export function ReceiptPrinter({
           <div className="receipt-printer-screen">
             <div className="row-top">
               <div className="what">
-                <strong>Order #ML-{order.number}</strong>
+                <strong>Order #BT-{order.number}</strong>
                 <small>Cash on delivery · {order.city}</small>
               </div>
               <div className="amt">
@@ -198,7 +198,7 @@ export function ReceiptPrinter({
             <hr className="receipt-rule" />
             <div className="receipt-meta">
               <span>Order</span>
-              <span>#ML-{order.number}</span>
+              <span>#BT-{order.number}</span>
               <span>Customer</span>
               <span>{order.customer}</span>
               <span>Phone</span>
@@ -212,7 +212,7 @@ export function ReceiptPrinter({
               Made with care. Thank you for shopping small.
             </p>
             <div className="receipt-barcode" aria-hidden="true" />
-            <div className="receipt-barcode-label">ML {order.number}</div>
+            <div className="receipt-barcode-label">BT {order.number}</div>
           </article>
         </div>
       </section>

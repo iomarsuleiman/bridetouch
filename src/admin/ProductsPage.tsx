@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Badge } from "../components/Badge";
 import { Icon } from "../components/Icon";
 import { money } from "../lib/format";
+import { SmartImage } from "../components/SmartImage";
 import { Heading } from "./shared";
 import type { AdminCtx } from "./types";
 
@@ -9,12 +10,22 @@ import type { AdminCtx } from "./types";
 export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
   const [tab, setTab] = useState("All");
   const [query, setQuery] = useState("");
-  const tabs = ["All", "In stock", "Low stock"];
+  const tabs = ["All", "In stock", "Low stock", "Sold out"];
+  const q = query.trim().toLowerCase();
   const items = ctx.products.filter(
     (p) =>
-      (tab === "All" || (tab === "Low stock" && p.stock <= 5) || (tab === "In stock" && p.stock > 0)) &&
-      (!query || p.name.toLowerCase().includes(query.toLowerCase())),
+      (tab === "All" ||
+        (tab === "In stock" && p.stock > 0) ||
+        (tab === "Low stock" && p.stock > 0 && p.stock <= 5) ||
+        (tab === "Sold out" && p.stock <= 0)) &&
+      (!q || (p.name + " " + p.category + " BT-" + String(p.number).padStart(3, "0")).toLowerCase().includes(q)),
   );
+  const counts: Record<string, number> = {
+    All: ctx.products.length,
+    "In stock": ctx.products.filter((p) => p.stock > 0).length,
+    "Low stock": ctx.products.filter((p) => p.stock > 0 && p.stock <= 5).length,
+    "Sold out": ctx.products.filter((p) => p.stock <= 0).length,
+  };
 
   return (
     <>
@@ -37,7 +48,7 @@ export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
               className={"tab" + (tab === t ? " active" : "")}
               onClick={() => setTab(t)}
             >
-              {t}
+              {t} <span className="tab-count">{counts[t]}</span>
             </button>
           ))}
         </div>
@@ -45,8 +56,11 @@ export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
           <div className="search">
             <Icon name="search" size="sm" />
             <input
+              type="search"
+              enterKeyHint="search"
+              autoComplete="off"
               aria-label="Search products"
-              placeholder="Search products"
+              placeholder="Search name, category or SKU"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -57,7 +71,6 @@ export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
             </span>
           </div>
         </div>
-        {!items.length ? <div className="empty">No products yet. Add your first product to start selling.</div> : null}
         <div className="table-wrap">
           <table>
             <thead>
@@ -75,18 +88,18 @@ export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
                 <tr key={p._id}>
                   <td>
                     <div className="prod-row">
-                      <img src={p.img} alt="" />
+                      <SmartImage src={p.img} alt="" />
                       <span>
                         <strong>{p.name}</strong>
-                        <small>SKU · ML-{String(p.number).padStart(3, "0")}</small>
+                        <small>SKU · BT-{String(p.number).padStart(3, "0")}</small>
                       </span>
                     </div>
                   </td>
                   <td>
-                    <Badge text={p.stock ? "Active" : "Sold out"} />
+                    <Badge text={p.stock > 0 ? "Active" : "Sold out"} />
                   </td>
                   <td>
-                    {p.stock} available {p.stock <= 5 ? <span className="badge amber">Low</span> : null}
+                    {p.stock} available {p.stock > 0 && p.stock <= 5 ? <span className="badge amber">Low</span> : null}
                   </td>
                   <td>{p.category}</td>
                   <td>{money(p.price)}</td>
@@ -112,11 +125,11 @@ export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
               style={{ width: "100%", textAlign: "left" }}
               onClick={() => ctx.openEditProduct(p._id)}
             >
-              <img style={{ width: 45, height: 50, objectFit: "cover", borderRadius: 8 }} src={p.img} alt="" />
+              <SmartImage style={{ width: 45, height: 50, objectFit: "cover", borderRadius: 8, flex: "none" }} src={p.img} alt="" />
               <span style={{ flex: 1 }}>
                 <strong>{p.name}</strong>
                 <small>
-                  {p.stock} in stock · {p.category}
+                  {p.stock > 0 ? `${p.stock} in stock` : "Sold out"} · {p.category}
                 </small>
               </span>
               <strong>{money(p.price)}</strong>
@@ -124,7 +137,17 @@ export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
             </button>
           ))}
         </div>
-        {items.length ? null : <div className="empty">No matching products.</div>}
+        {items.length ? null : (
+          <div className="empty">
+            {ctx.products.length ? (q ? "No products match that search." : `No products are ${tab.toLowerCase()}.`) : (
+              <>
+                <h3>No products yet</h3>
+                <p>Add your first product to start selling.</p>
+                <button className="btn primary" type="button" onClick={() => ctx.openModal("add-product")}><Icon name="plus" size="sm" /> Add product</button>
+              </>
+            )}
+          </div>
+        )}
       </section>
     </>
   );

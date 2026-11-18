@@ -1,6 +1,7 @@
 import { BrandLogo } from "../components/BrandLogo";
 import { Icon } from "../components/Icon";
 import type { Doc } from "../../convex/_generated/dataModel";
+import { linkHandler } from "../hooks/useHashRoute";
 
 const LABELS: Record<string, string> = { instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok" };
 
@@ -17,9 +18,15 @@ export function StoreFooter({ settings }: { settings: Doc<"settings"> | null | u
 
   return (
     <footer className="footer">
-      <div className="brand">
-        <BrandLogo src={settings?.logoImage} name={settings?.storeName} />
-        <span className="brand-word">{settings?.storeName ?? "bridetouch"}.</span>
+      <div className="footer-brand">
+        <a className="brand" href="/" onClick={linkHandler("shop")}>
+          <BrandLogo src={settings?.logoImage} name={settings?.storeName} />
+          <span className="brand-word">{settings?.storeName ?? "bridetouch"}.</span>
+        </a>
+        <small>
+          © {new Date().getFullYear()} {settings?.storeName ?? "bridetouch"}
+          {settings?.city ? ` · ${settings.city}` : ""} · Cash on delivery
+        </small>
       </div>
       <div className="footer-links">
         {links.length ? (

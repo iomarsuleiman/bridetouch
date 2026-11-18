@@ -1,32 +1,41 @@
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Show, SignInButton, SignOutButton } from "@clerk/react";
 import { useHashRoute } from "./hooks/useHashRoute";
 import { Icon } from "./components/Icon";
 import Storefront from "./store/Storefront";
-import AdminApp from "./admin/AdminApp";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+
+// The dashboard is a separate chunk, so shoppers never download it.
+const AdminApp = lazy(() => import("./admin/AdminApp"));
 
 export default function App() {
   const route = useHashRoute();
 
+  // New pages start at the top; an instant jump avoids a long animated scroll
+  // through the previous page.
   useEffect(() => {
-    document.title = (route.area === "admin" ? "Dashboard · " : "") + "bridetouch";
-  }, [route.area]);
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  }, [route.area, route.view, route.area === "store" ? route.productId : 0]);
 
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [route]);
+  const resetKey = location.pathname + location.search;
 
   if (route.area === "admin") {
     return (
-      <Show when="signed-in" fallback={<SignInPrompt />}>
-        <AdminAccess view={route.view} />
-      </Show>
+      <ErrorBoundary resetKey={resetKey}>
+        <Show when="signed-in" fallback={<SignInPrompt />}>
+          <AdminAccess view={route.view} />
+        </Show>
+      </ErrorBoundary>
     );
   }
 
-  return <Storefront route={route} />;
+  return (
+    <ErrorBoundary resetKey={resetKey}>
+      <Storefront route={route} />
+    </ErrorBoundary>
+  );
 }
 
 // Shown at /admin when nobody is signed in. The dashboard is intentionally
@@ -74,7 +83,7 @@ function SignInPrompt() {
 
 function AdminAccess({view}:{view:string}) {
   const allowed = useQuery(api.access.current);
-  if (allowed === undefined) return <div className="empty">Checking access?</div>;
+  if (allowed === undefined) return <PageSpinner label="Checking access…" />;
   if (!allowed) {
     return (
       <div
@@ -102,5 +111,18 @@ function AdminAccess({view}:{view:string}) {
       </div>
     );
   }
-  return <AdminApp view={view} />;
+  return (
+    <Suspense fallback={<PageSpinner label="Opening dashboard…" />}>
+      <AdminApp view={view} />
+    </Suspense>
+  );
+}
+
+function PageSpinner({ label }: { label: string }) {
+  return (
+    <div className="page-spinner" role="status">
+      <span className="spinner" aria-hidden="true" />
+      <span>{label}</span>
+    </div>
+  );
 }

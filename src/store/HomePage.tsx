@@ -1,15 +1,36 @@
 import type { ReactNode } from "react";
 import type { Doc } from "../../convex/_generated/dataModel";
 import { Icon } from "../components/Icon";
+import { SmartImage } from "../components/SmartImage";
+import { linkHandler } from "../hooks/useHashRoute";
+import { useJsonLd, useSeo } from "../lib/seo";
 import { useStoreUI } from "./ui";
 import { ProductCard } from "./ProductCard";
 
-// Port of home() from src/index.html.
 export function HomePage({ products, settings, collections }: { products: Doc<"products">[]; settings: Doc<"settings">; collections: Doc<"collections">[] }) {
   const { goToCategory } = useStoreUI();
+  const storeName = settings.storeName || "bridetouch";
+  const heroDescription = settings.heroDescription ?? "Ceramics, little keepsakes and everyday favorites. Each piece has its own kind of charm.";
 
-  const heroImg = settings.heroImage || products[0]?.img || "";
-  const storyImg = settings.storyImage || products[4]?.img || "";
+  useSeo({ description: heroDescription, image: settings.heroImage || products[0]?.img, path: "/" }, storeName);
+  const socials = (settings.socials ?? []).filter((s) => s.enabled && s.url.trim()).map((s) => s.url);
+  useJsonLd("ld-store", {
+    "@context": "https://schema.org",
+    "@type": "Store",
+    name: storeName,
+    url: location.origin,
+    logo: new URL(settings.logoImage || "/bridetouch-logo.png", location.origin).href,
+    email: settings.email || undefined,
+    address: settings.city ? { "@type": "PostalAddress", addressLocality: settings.city, addressCountry: "EG" } : undefined,
+    currenciesAccepted: "EGP",
+    paymentAccepted: "Cash",
+    sameAs: socials.length ? socials : undefined,
+  });
+
+  // In-stock pieces lead; sold-out ones still show, but last.
+  const ordered = [...products].sort((a, b) => Number(b.stock > 0) - Number(a.stock > 0));
+  const heroImg = settings.heroImage || ordered[0]?.img || "";
+  const storyImg = settings.storyImage || ordered[4]?.img || "";
 
   // Never advertise empty placeholder collections as if they contain products.
   // Real product categories appear as browseable groups even before a collection is curated.
@@ -26,75 +47,88 @@ export function HomePage({ products, settings, collections }: { products: Doc<"p
     });
   const browseGroups = [...savedCollections, ...uncoveredCategories];
 
-  const grid = (items: Doc<"products">[]): ReactNode => items.length ? (
+  const grid = (items: Doc<"products">[], eager = false): ReactNode => (
     <div className="product-grid">
       {items.map((p) => (
-        <ProductCard key={p._id} product={p} />
+        <ProductCard key={p._id} product={p} eager={eager} />
       ))}
     </div>
-  ) : <div className="empty">New pieces are coming soon. Follow us for updates.</div>;
+  );
+  const featured = ordered.slice(0, 4);
+  const more = ordered.slice(4, 8);
 
   return (
     <>
       <section className={"hero" + (!heroImg ? " hero-no-image" : "")}>
         <div className="hero-copy">
-          <h1>
+          <h1 className="hero-title">
             {settings.heroTitle ?? <>A little something, <em>made by hand.</em></>}
           </h1>
-          <p>{settings.heroDescription ?? "Ceramics, little keepsakes and everyday favorites. Each piece has its own kind of charm."}</p>
-          <button className="btn primary" onClick={() => goToCategory("All")}>
+          <p className="hero-sub">{heroDescription}</p>
+          <a className="btn primary hero-cta" href="/catalog" onClick={linkHandler("catalog", () => goToCategory("All"))}>
             Explore the collection <Icon name="arrow" />
-          </button>
+          </a>
         </div>
-        {heroImg ? <div className="hero-art">
-          <img className="hero-img" src={heroImg} alt="Handmade ceramic piece" />
-        </div> : null}
+        {heroImg ? (
+          <div className="hero-art">
+            <SmartImage className="hero-img" src={heroImg} alt={`${storeName} featured piece`} fetchPriority="high" />
+          </div>
+        ) : null}
       </section>
       {browseGroups.length ? (
-        <section className="shop-section storefront-collections">
-          <div className="section-heading"><h2>Explore our collections.</h2></div>
+        <section className="shop-section storefront-collections" aria-labelledby="collections-heading">
+          <div className="section-heading reveal"><h2 id="collections-heading">Explore our collections.</h2></div>
           <div className="card-list">
-            {browseGroups.map((collection) => (
-              <button className="collection-card" key={collection.name} onClick={() => goToCategory(collection.name)}>
-                {collection.image ? <img src={collection.image} alt="" loading="lazy" /> : null}
-                <span className="cc-body">
-                  <strong>{collection.name}</strong>
-                  <small>{collection.count} {collection.count === 1 ? "piece" : "pieces"}</small>
-                </span>
-              </button>
-            ))}
+            {browseGroups.map((collection) => {
+              const href = "/catalog?category=" + encodeURIComponent(collection.name);
+              return (
+                <a className="collection-card reveal" key={collection.name} href={href} onClick={linkHandler(href, () => goToCategory(collection.name))}>
+                  <SmartImage src={collection.image} alt="" loading="lazy" />
+                  <span className="cc-body">
+                    <strong>{collection.name}</strong>
+                    <small>{collection.count} {collection.count === 1 ? "piece" : "pieces"}</small>
+                  </span>
+                </a>
+              );
+            })}
           </div>
         </section>
       ) : null}
-      <section className="shop-section">
-        <div className="section-heading">
-          <div>
-            <h2>Made to make you smile.</h2>
-          </div>
-          <button className="btn secondary" onClick={() => goToCategory("All")}>
-            View all <Icon name="arrow" size="sm" />
-          </button>
+      <section className="shop-section" aria-labelledby="featured-heading">
+        <div className="section-heading reveal">
+          <h2 id="featured-heading">Made to make you smile.</h2>
+          {products.length ? (
+            <a className="btn secondary" href="/catalog" onClick={linkHandler("catalog", () => goToCategory("All"))}>
+              View all <Icon name="arrow" size="sm" />
+            </a>
+          ) : null}
         </div>
-        {grid(products.slice(0, 4))}
+        {featured.length ? grid(featured, true) : (
+          <div className="empty">
+            <Icon name="sparkle" size="xl" />
+            <h3>New pieces are on their way.</h3>
+            <p>Follow us for the first look when they arrive.</p>
+          </div>
+        )}
       </section>
-      <div className={"story-band" + (!storyImg ? " story-no-image" : "")}>
+      <div className={"story-band reveal" + (!storyImg ? " story-no-image" : "")}>
         <div className="story-copy">
           <h2>{settings.storyTitle ?? "Good things take a little time."}</h2>
           <p>{settings.storyDescription ?? "Thoughtfully made pieces for the quiet, colorful moments in everyday life."}</p>
-          <button className="btn secondary" onClick={() => goToCategory("All")}>
-            Shop handmade <Icon name="arrow" size="sm" />
-          </button>
+          <a className="btn secondary" href="/catalog" onClick={linkHandler("catalog", () => goToCategory("All"))}>
+            Shop now <Icon name="arrow" size="sm" />
+          </a>
         </div>
-        {storyImg ? <img className="story-photo" src={storyImg} alt="Handcrafted ceramics" loading="lazy" /> : null}
+        {storyImg ? <SmartImage className="story-photo" src={storyImg} alt="" loading="lazy" /> : null}
       </div>
-      <section className="shop-section" style={{ paddingTop: 8 }}>
-        <div className="section-heading">
-          <div>
-            <h2>Little lovely things.</h2>
+      {more.length ? (
+        <section className="shop-section" style={{ paddingTop: 8 }} aria-labelledby="more-heading">
+          <div className="section-heading reveal">
+            <h2 id="more-heading">Little lovely things.</h2>
           </div>
-        </div>
-        {grid(products.slice(4, 8))}
-      </section>
+          {grid(more)}
+        </section>
+      ) : null}
     </>
   );
 }

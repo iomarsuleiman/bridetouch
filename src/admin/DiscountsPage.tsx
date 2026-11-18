@@ -4,7 +4,8 @@ import { Badge } from "../components/Badge";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
 import { money } from "../lib/format";
-import { Heading } from "./shared";
+import { DeleteButton, Heading } from "./shared";
+import { friendlyError } from "../lib/format";
 import { copyText } from "./utils";
 import type { AdminCtx } from "./types";
 
@@ -12,6 +13,7 @@ import type { AdminCtx } from "./types";
 export function DiscountsPage({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
   const toggle = useMutation(api.coupons.toggle);
+  const remove = useMutation(api.coupons.remove);
   const active = ctx.coupons.filter((c) => c.active).length;
   const uses = ctx.coupons.reduce((s, c) => s + c.uses, 0);
 
@@ -44,6 +46,7 @@ export function DiscountsPage({ ctx }: { ctx: AdminCtx }) {
         <div className="panel-head">
           <h2>Discount codes</h2>
         </div>
+        {!ctx.coupons.length ? <div className="empty">No discount codes yet. Create one to share with customers.</div> : null}
         <div className="table-wrap">
           <table>
             <thead>
@@ -67,12 +70,12 @@ export function DiscountsPage({ ctx }: { ctx: AdminCtx }) {
                     <Badge text={c.active ? "Active" : "Paused"} />
                   </td>
                   <td>
+                    <span className="row-actions">
                     <button
-                      className="row-action"
-                      onClick={async () => { try { await toggle({id:c._id}); toast("Discount updated"); } catch { toast("Could not update discount"); } }}
-                      aria-label={"Toggle " + c.code}
+                      className="btn small secondary"
+                      onClick={async () => { try { await toggle({id:c._id}); toast(c.active ? `${c.code} paused` : `${c.code} activated`); } catch (e) { toast(friendlyError(e, "Could not update discount")); } }}
                     >
-                      <Icon name="refresh" />
+                      {c.active ? "Pause" : "Activate"}
                     </button>
                     <button
                       className="row-action"
@@ -81,6 +84,8 @@ export function DiscountsPage({ ctx }: { ctx: AdminCtx }) {
                     >
                       <Icon name="copy" />
                     </button>
+                    <DeleteButton label="" onDelete={async () => { try { await remove({ id: c._id }); toast(`${c.code} deleted`); } catch (e) { toast(friendlyError(e, "Could not delete code")); } }} />
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -97,10 +102,11 @@ export function DiscountsPage({ ctx }: { ctx: AdminCtx }) {
               <Badge text={c.active ? "Active" : "Paused"} />
               <button
                 className="btn small secondary"
-                onClick={async () => { try { await toggle({id:c._id}); toast("Discount updated"); } catch { toast("Could not update discount"); } }}
+                onClick={async () => { try { await toggle({id:c._id}); toast(c.active ? `${c.code} paused` : `${c.code} activated`); } catch (e) { toast(friendlyError(e, "Could not update discount")); } }}
               >
-                Toggle
+                {c.active ? "Pause" : "Activate"}
               </button>
+              <DeleteButton label="" onDelete={async () => { try { await remove({ id: c._id }); toast(`${c.code} deleted`); } catch (e) { toast(friendlyError(e, "Could not delete code")); } }} />
             </div>
           ))}
         </div>

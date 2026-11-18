@@ -1,4 +1,5 @@
-import { useQuery } from "convex/react";
+import { useEffect, useRef, useState } from "react";
+import { useConvex, useQuery } from "convex/react";
 import type { Doc } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { money } from "../lib/format";
@@ -7,6 +8,7 @@ import { availableStock, priceForVariant, variantLabel } from "./productVariants
 import { checkoutDiscount } from "./salePricing";
 import { useToast } from "../components/Toast";
 import { Icon } from "../components/Icon";
+import { SmartImage } from "../components/SmartImage";
 import { navigate } from "../hooks/useHashRoute";
 import { useStoreUI } from "./ui";
 import { shippingTotal } from "./totals";
@@ -25,14 +27,25 @@ export function CartSheet({
   couponInput: string;
   onCouponInputChange: (value: string) => void;
   appliedCoupon: Doc<"coupons"> | null;
-  onApplyCoupon: (coupon: Doc<"coupons">) => void;
+  onApplyCoupon: (coupon: Doc<"coupons"> | null) => void;
 }) {
   const cart = useCart();
   const sales = useQuery(api.sales.activeList) ?? [];
   const collections = useQuery(api.collections.list) ?? [];
   const toast = useToast();
   const { closeCart, goToCategory } = useStoreUI();
-  const coupon = useQuery(api.coupons.validate, {code: couponInput.trim()});
+  const typedCode = couponInput.trim();
+  const convex = useConvex();
+  const [checking, setChecking] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const opener = useRef<Element | null>(null);
+
+  // Move focus into the bag when it opens and give it back when it closes.
+  useEffect(() => {
+    opener.current = document.activeElement;
+    closeRef.current?.focus();
+    return () => (opener.current as HTMLElement | null)?.focus?.();
+  }, []);
 
   const byNumber = (number: number) => products.find((p) => p.number === number);
 
@@ -45,16 +58,27 @@ export function CartSheet({
   const discount = checkoutDiscount(lines, appliedCoupon, sales, collections, Date.now());
   const total = Math.max(0, subtotal + shipping - discount);
 
-  const applyCoupon = () => {
-    const code = couponInput.trim().toUpperCase();
-    const found = coupon?.code === code ? coupon : null;
-    if (found) {
-      onApplyCoupon(found);
-      toast("Code applied");
-    } else {
-      toast("Invalid code");
+  const applyCoupon = async () => {
+    const code = typedCode.toUpperCase();
+    if (!code || checking) return;
+    setChecking(true);
+    try {
+      const coupon = await convex.query(api.coupons.validate, { code });
+      if (coupon) {
+        onApplyCoupon(coupon);
+        onCouponInputChange("");
+        toast(`Code ${code} applied`);
+      } else {
+        toast("That code isn't valid or has expired");
+      }
+    } catch {
+      toast("Couldn't check that code. Please try again.");
+    } finally {
+      setChecking(false);
     }
   };
+  const saleOnly = checkoutDiscount(lines, null, sales, collections, Date.now());
+  const couponIsBeatenBySale = !!appliedCoupon && discount === saleOnly && saleOnly > 0;
 
   const changeQty = (product: Doc<"products">, item: CartItem, delta: number) => {
     const next = item.qty + delta;
@@ -67,13 +91,13 @@ export function CartSheet({
 
   return (
     <>
-      <div className="overlay" onClick={closeCart} />
+      <div className="overlay" onClick={closeCart} aria-hidden="true" />
       <aside className="sheet" role="dialog" aria-modal="true" aria-label="Shopping bag">
         <div className="sheet-head">
           <div>
             <h2>Your little bag {cart.count ? `(${cart.count})` : ""}</h2>
           </div>
-          <button className="btn icon-only ghost" onClick={closeCart} aria-label="Close bag">
+          <button ref={closeRef} className="btn icon-only ghost" onClick={closeCart} aria-label="Close bag">
             <Icon name="close" />
           </button>
         </div>
@@ -83,21 +107,31 @@ export function CartSheet({
               {cart.items.map((it) => {
                 const p = byNumber(it.number);
                 if (!p) return null;
+                const available = availableStock(p, it.variant);
                 return (
                   <div className="line-item" key={cartItemKey(it)}>
-                    <img src={p.img ?? ""} alt="" />
+                    <SmartImage src={p.img} alt="" />
                     <div className="li-info">
                       <strong>{p.name}</strong>
                       <small>{variantLabel(p, it.variant) || p.color}</small>
+                      {it.qty > available ? (
+                        <small className="line-warning">
+                          {available ? `Only ${available} left` : "Sold out"} ·{" "}
+                          <button type="button" onClick={() => cart.setQty(p.number, available, it.variant)}>
+                            {available ? "Update" : "Remove"}
+                          </button>
+                        </small>
+                      ) : null}
                       <div className="qty-step" style={{ width: 106, minWidth: 0, height: 36 }}>
                         <button
                           onClick={() => changeQty(p, it, -1)}
-                          aria-label={`Decrease ${p.name}`}
+                          aria-label={it.qty === 1 ? `Remove ${p.name}` : `Decrease ${p.name}`}
                         >
-                          <Icon name="minus" size="sm" />
+                          <Icon name={it.qty === 1 ? "trash" : "minus"} size="sm" />
                         </button>
-                        {it.qty}
+                        <span aria-label={`Quantity ${it.qty}`}>{it.qty}</span>
                         <button
+                          disabled={it.qty >= available}
                           onClick={() => changeQty(p, it, 1)}
                           aria-label={`Increase ${p.name}`}
                         >
@@ -112,24 +146,45 @@ export function CartSheet({
                   </div>
                 );
               })}
-              <div style={{ padding: "23px 0" }}>
-                <label className="field">
-                  <span style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
-                    Discount code
-                  </span>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input
-                      id="couponInput"
-                      aria-label="Discount code"
-                      placeholder="Enter code"
-                      value={couponInput}
-                      onChange={(e) => onCouponInputChange(e.target.value)}
-                    />
-                    <button className="btn secondary" onClick={applyCoupon}>
-                      Apply
+              <div className="coupon-box">
+                {appliedCoupon ? (
+                  <div className="coupon-applied">
+                    <Icon name="tag" size="sm" />
+                    <span>
+                      <strong>{appliedCoupon.code}</strong>
+                      <small>{couponIsBeatenBySale ? "The running sale already gives you a better price" : appliedCoupon.type === "Percentage" ? `${appliedCoupon.value}% off` : `${money(appliedCoupon.value)} off`}</small>
+                    </span>
+                    <button type="button" onClick={() => onApplyCoupon(null)} aria-label={`Remove code ${appliedCoupon.code}`}>
+                      <Icon name="close" size="sm" />
                     </button>
                   </div>
-                </label>
+                ) : (
+                  <form
+                    className="field"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void applyCoupon();
+                    }}
+                  >
+                    <label htmlFor="couponInput">Discount code</label>
+                    <div className="coupon-row">
+                      <input
+                        id="couponInput"
+                        placeholder="Enter code"
+                        autoCapitalize="characters"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        enterKeyHint="go"
+                        autoComplete="off"
+                        value={couponInput}
+                        onChange={(e) => onCouponInputChange(e.target.value)}
+                      />
+                      <button className="btn secondary" type="submit" disabled={!typedCode || checking} aria-busy={checking}>
+                        {checking ? <span className="spinner" aria-hidden="true" /> : null} Apply
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </>
           ) : (

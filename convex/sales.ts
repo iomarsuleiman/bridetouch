@@ -116,3 +116,13 @@ export const toggle = mutation({
     return null;
   },
 });
+
+export const remove = mutation({
+  args: { id: v.id("sales") },
+  returns: v.null(),
+  handler: async (ctx, { id }) => {
+    await requireAdmin(ctx);
+    if (await ctx.db.get(id)) await ctx.db.delete(id);
+    return null;
+  },
+});

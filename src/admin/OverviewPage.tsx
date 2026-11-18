@@ -3,6 +3,7 @@ import { OrderChart } from "./OrderChart";
 import { useState } from "react";
 import { Icon } from "../components/Icon";
 import { money } from "../lib/format";
+import { SmartImage } from "../components/SmartImage";
 import { navigate } from "../hooks/useHashRoute";
 import { Heading, Select, Stat } from "./shared";
 import { OrdersTable } from "./OrdersTable";
@@ -14,6 +15,12 @@ export function OverviewPage({ ctx }: { ctx: AdminCtx }) {
   const metrics = orderMetrics(ctx.orders, period);
   const newCount = ctx.orders.filter(o => o.status === "New").length;
   const recent = ctx.orders.slice(0, 5);
+  const hour = new Date().getHours();
+  const greeting = hour < 5 ? "Good evening" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const inStock = ctx.products.filter((p) => p.stock > 0).length;
+  const lowStock = ctx.products.filter((p) => p.stock > 0 && p.stock <= 3).length;
+  const soldOut = ctx.products.length - inStock;
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
   const popular = ctx.products.filter(p => metrics.sold.has(p.number)).sort((a,b)=>(metrics.sold.get(b.number) ?? 0)-(metrics.sold.get(a.number) ?? 0)).slice(0,4);
 
   return (
@@ -21,7 +28,7 @@ export function OverviewPage({ ctx }: { ctx: AdminCtx }) {
       <Heading
         title={
           <>
-            Good morning, maker <span style={{ color: "#d9a89b" }}>✳</span>
+            {greeting} <span style={{ color: "#d9a89b" }}>✳</span>
           </>
         }
         subtitle="Here is what is happening in your store today."
@@ -34,11 +41,11 @@ export function OverviewPage({ ctx }: { ctx: AdminCtx }) {
       <div className="stat-grid">
         <Stat label="Total orders" value={metrics.selected.length} change={period} icon="bag" />
         <Stat label="Order value" value={money(metrics.total)} change="Excludes cancelled orders" icon="wallet" />
-        <Stat label="Needs attention" value={newCount + " orders"} change="Awaiting confirmation" icon="clock" />
+        <Stat label="Needs attention" value={plural(newCount, "order")} change={newCount ? "New orders to confirm" : "Nothing waiting"} icon="clock" />
         <Stat
-          label="Products live"
-          value={ctx.products.length + " items"}
-          change={"Across " + ctx.collections.length + " collections"}
+          label="In stock"
+          value={plural(inStock, "product")}
+          change={soldOut || lowStock ? [soldOut ? `${soldOut} sold out` : "", lowStock ? `${lowStock} running low` : ""].filter(Boolean).join(" · ") : "All stocked up"}
           icon="package"
         />
       </div>
@@ -71,7 +78,7 @@ export function OverviewPage({ ctx }: { ctx: AdminCtx }) {
             {!popular.length ? <div className="empty">Sales will appear here when orders arrive.</div> : null}
             {popular.map((p) => (
               <div key={p._id} className="activity-row">
-                <img className="activity-image" src={p.img} alt="" />
+                <SmartImage className="activity-image" src={p.img} alt="" />
                 <div className="info">
                   <strong>{p.name}</strong>
                   <small>{metrics.sold.get(p.number) ?? 0} sold</small>

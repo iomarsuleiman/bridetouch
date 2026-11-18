@@ -51,16 +51,39 @@ for (let i = 0; i < payload.length; i += blockSize) {
   imports.push('import ' + id + ' from "./' + name + '";');
   names.push(id);
 }
+fs.copyFileSync(path.resolve("worker-seo.js"), path.join(target, "worker-seo.js"));
+const convexUrl = process.env.VITE_CONVEX_URL || "";
 const worker = `
+import { classify, isAssetPath, renderPage, robotsTxt, sitemapXml } from "./worker-seo.js";
 ${imports.join("\n")}
+const CONVEX_URL = ${JSON.stringify(convexUrl)};
+const INDEX_HTML = ${JSON.stringify(fs.readFileSync(path.join(root, "index.html"), "utf8"))};
 const entries = JSON.parse(${names.join(" + ")});
 const assets = new Map(entries.map(entry => [entry.route, entry]));
 export default {
-  async fetch(request) {
+  async fetch(request, env = {}) {
     if (request.method !== "GET" && request.method !== "HEAD") {
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
     }
     const url = new URL(request.url);
+    const convexUrl = env.CONVEX_URL || CONVEX_URL;
+    const security = {
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+      "X-Frame-Options": "DENY"
+    };
+    if (url.pathname === "/robots.txt") {
+      return new Response(robotsTxt(url.origin), { headers: { ...security, "Content-Type": "text/plain; charset=utf-8" } });
+    }
+    if (url.pathname === "/sitemap.xml") {
+      try {
+        return new Response(await sitemapXml(url.origin, convexUrl), { headers: { ...security, "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=900" } });
+      } catch {
+        return new Response("Sitemap temporarily unavailable", { status: 503, headers: { "Retry-After": "300" } });
+      }
+    }
     let item = assets.get(url.pathname);
     if (!item) {
       // An SPA route receives the entry HTML, while absent static files remain 404.
@@ -85,6 +108,15 @@ export default {
       "Referrer-Policy": "strict-origin-when-cross-origin",
       "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
     });
+    for (const [name, value] of Object.entries(security)) headers.set(name, value);
+    if (item.route === "/index.html") {
+      // App routes: tailor title/meta per URL and answer unknown pages with 404.
+      headers.delete("Content-Encoding");
+      if (classify(url.pathname).noindex) headers.set("X-Robots-Tag", "noindex");
+      const shell = new Response(INDEX_HTML, { status: 200, headers });
+      const page = await renderPage(request, shell, convexUrl);
+      return request.method === "HEAD" ? new Response(null, { status: page.status, headers: page.headers }) : page;
+    }
     return new Response(request.method === "HEAD" ? null : bytes, { status: 200, headers, encodeBody: "manual" });
   }
 };

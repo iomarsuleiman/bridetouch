@@ -18,6 +18,8 @@ import { AnalyticsPage } from "./AnalyticsPage";
 import { ShippingPage } from "./ShippingPage";
 import { SettingsPage } from "./SettingsPage";
 import type { AdminCtx, ModalKey } from "./types";
+import { useScrollLock } from "../hooks/useScrollLock";
+import { navigate } from "../hooks/useHashRoute";
 
 const PAGES: Record<string, ComponentType<{ ctx: AdminCtx }>> = {
   overview: OverviewPage,
@@ -66,13 +68,13 @@ export default function AdminApp({ view }: { view: string }) {
     setMobileSidebar(false);
   }, [view]);
 
-  // Vanilla render() locked body scroll while a modal was open.
+  // Lock the page behind dialogs and the mobile sidebar (works on iOS too).
+  useScrollLock(!!modal || mobileSidebar);
+
   useEffect(() => {
-    document.body.style.overflow = modal ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [modal]);
+    const names: Record<string, string> = { overview: "Overview", orders: "Orders", products: "Products", collections: "Collections", customers: "Customers", discounts: "Discounts", sales: "Sales", offers: "Offers", analytics: "Analytics", shipping: "Shipping", settings: "Settings" };
+    document.title = `${names[view] ?? "Dashboard"} · Dashboard`;
+  }, [view]);
 
   // Port of the vanilla keyboard shortcuts.
   useEffect(() => {
@@ -139,6 +141,9 @@ export default function AdminApp({ view }: { view: string }) {
       : null;
 
   const Page = PAGES[view] ?? OverviewPage;
+  useEffect(() => {
+    if (!PAGES[view]) navigate("admin/overview", { replace: true });
+  }, [view]);
 
   return (
     <div className="admin">
@@ -165,9 +170,9 @@ export default function AdminApp({ view }: { view: string }) {
           />
           <main key={view} id="main" className="admin-body page-animate">
             {ctx ? (
-              <>{settings?.notifications ? <NotificationPrompt /> : null}<Page ctx={ctx} /></>
+              <>{settings?.notifications && view === "overview" ? <NotificationPrompt /> : null}<Page ctx={ctx} /></>
             ) : (
-              <div className="empty">Loading…</div>
+              <div className="page-spinner" role="status"><span className="spinner" aria-hidden="true" /> Loading your store…</div>
             )}
           </main>
         </div>

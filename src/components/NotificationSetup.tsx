@@ -1,3 +1,4 @@
+import { friendlyError } from "../lib/format";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -25,8 +26,8 @@ export function NotificationSetup() {
       if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) throw new Error("Browser returned an invalid subscription");
       await subscribe({endpoint:json.endpoint,expirationTime:json.expirationTime ?? null,keys:{p256dh:json.keys.p256dh,auth:json.keys.auth}});
       setEnabled(true);toast.success("New order notifications enabled");
-    } catch(error) {toast.error(error instanceof Error ? error.message : "Could not enable notifications");}
+    } catch(error) {toast.error(friendlyError(error, "Could not enable notifications"));}
     finally {setBusy(false);}
   }
-  return <section className="notification-setup"><h3>New order notifications</h3><p>Get an alert on this device when an order arrives, even with the app closed.</p>{!supported ? <p>Use a supported browser. On iPhone, add this app to your Home Screen first.</p> : <button className="btn secondary" disabled={busy || !key} onClick={toggle}>{busy?"Updating?":enabled?"Disable on this device":"Enable notifications"}</button>}</section>;
+  return <section className="notification-setup"><h3>New order notifications</h3><p>Get an alert on this device when an order arrives, even with the app closed.</p>{!supported ? <p>Use a supported browser. On iPhone, open this page in Safari, tap Share → Add to Home Screen, then open the dashboard from there.</p> : key === null ? <p>Notifications aren't set up on the server yet (missing VAPID keys).</p> : <button className="btn secondary" disabled={busy || !key} onClick={toggle}>{busy ? "Updating…" : enabled ? "Disable on this device" : "Enable notifications"}</button>}</section>;
 }

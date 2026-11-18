@@ -1,20 +1,40 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#faf9f5" />
-    <meta name="description" content="bridetouch — handmade boutique and store dashboard" />
     <title>bridetouch</title>
+    <meta name="description" content="Shop bridetouch online. Pay cash on delivery." />
+    <meta property="og:site_name" content="bridetouch" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="bridetouch" />
+    <meta property="og:description" content="Shop bridetouch online. Pay cash on delivery." />
+    <meta property="og:image" content="/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="format-detection" content="telephone=no" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="icon" type="image/png" href="/bridetouch-logo.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Fraunces:opsz,wght,SOFT,WONK@9..144,400,50,1;9..144,500,50,1;9..144,600,50,1&family=JetBrains+Mono:wght@400;700&display=swap"
+    />
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;600;700&family=Fraunces:opsz,wght,SOFT,WONK@9..144,400,50,1;9..144,500,50,1;9..144,600,50,1&family=JetBrains+Mono:wght@400;700&display=swap');
+      /* Shown until the app paints, so the first frame isn't blank white. */
+      html,body{background:#faf9f5;margin:0}
+      #boot{min-height:100vh;display:grid;place-items:center}
+      #boot span{width:30px;height:30px;border-radius:50%;border:2px solid #e3e0d6;border-top-color:#355241;animation:boot .8s linear infinite}
+      @keyframes boot{to{transform:rotate(360deg)}}
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div id="boot" aria-label="Loading"><span></span></div></div>
+    <noscript>
+      <p style="font:16px system-ui;padding:48px;text-align:center">This shop needs JavaScript to work. Please enable it in your browser and reload.</p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -5,7 +5,11 @@ import { api } from "../../convex/_generated/api";
 import { useCart } from "../lib/cart";
 import { BrandLogo } from "../components/BrandLogo";
 import { Icon } from "../components/Icon";
-import { navigate } from "../hooks/useHashRoute";
+import { linkHandler, navigate, type StoreView } from "../hooks/useHashRoute";
+import { NotFoundPage } from "./NotFoundPage";
+import { StoreSkeleton } from "./StoreSkeleton";
+import { useScrollReveal } from "../lib/reveal";
+import { useScrollLock } from "../hooks/useScrollLock";
 import { StoreUIProvider, type StoreUI } from "./ui";
 import { PromoBanner } from "./PromoBanner";
 import { HomePage } from "./HomePage";
@@ -17,9 +21,19 @@ import { CartSheet } from "./CartSheet";
 import { StoreFooter } from "./StoreFooter";
 
 export type StoreRoute = {
-  view: "shop" | "catalog" | "product" | "checkout" | "confirmation";
+  view: StoreView;
   productId?: number;
 };
+
+// The confirmation page survives a refresh for the rest of the browser session.
+const LAST_ORDER_KEY = "bridetouch-last-order";
+function readLastOrder(): Doc<"orders"> | null {
+  try {
+    return JSON.parse(sessionStorage.getItem(LAST_ORDER_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
 
 // Port of storeHeader()/store() from src/index.html, with the ui object
 // replaced by React state and data-act handlers replaced by callbacks.
@@ -28,13 +42,23 @@ export default function Storefront({ route }: { route: StoreRoute }) {
   const collections = useQuery(api.collections.list) ?? [];
   const settings = useQuery(api.settings.get);
   const cart = useCart();
+  useScrollReveal();
 
   const [cartOpen, setCartOpen] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [storeCategory, setStoreCategory] = useState(() => new URLSearchParams(location.search).get("category") ?? "All");
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<Doc<"coupons"> | null>(null);
-  const [lastOrder, setLastOrder] = useState<Doc<"orders"> | null>(null);
+  const [lastOrder, setLastOrder] = useState<Doc<"orders"> | null>(readLastOrder);
+
+  // Drop bag lines whose product has been deleted, so checkout can't fail on them.
+  const { items: cartItems, remove: removeFromCart } = cart;
+  useEffect(() => {
+    if (!products) return;
+    for (const item of cartItems) {
+      if (!products.some((p) => p.number === item.number)) removeFromCart(item.number, item.variant);
+    }
+  }, [products, cartItems, removeFromCart]);
 
   // Vanilla route() closes the drawer and the mobile nav on every navigation.
   useEffect(() => {
@@ -42,13 +66,8 @@ export default function Storefront({ route }: { route: StoreRoute }) {
     setMobileNav(false);
   }, [route]);
 
-  // Vanilla render() locks body scroll while the cart sheet is open.
-  useEffect(() => {
-    document.body.style.overflow = cartOpen ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [cartOpen]);
+  // Lock the page behind the bag and the mobile menu (works on iOS too).
+  useScrollLock(cartOpen || mobileNav);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -98,6 +117,11 @@ export default function Storefront({ route }: { route: StoreRoute }) {
 
   const handleOrderPlaced = (order: Doc<"orders">) => {
     setLastOrder(order);
+    try {
+      sessionStorage.setItem(LAST_ORDER_KEY, JSON.stringify(order));
+    } catch {
+      // private mode: the confirmation simply won't survive a refresh
+    }
     cart.clear();
     setAppliedCoupon(null);
     setCouponInput("");
@@ -106,15 +130,17 @@ export default function Storefront({ route }: { route: StoreRoute }) {
 
   let page: ReactNode;
   if (!products || !settings) {
-    page = <div className="empty">Loading…</div>;
+    page = <StoreSkeleton view={route.view} />;
+  } else if (route.view === "notfound") {
+    page = <NotFoundPage products={products} storeName={settings.storeName} />;
   } else if (route.view === "catalog") {
     page = <CatalogPage products={products} category={storeCategory} collections={collections} settings={settings} />;
   } else if (route.view === "product") {
     const p = products.find((x) => x.number === route.productId);
     page = p ? (
-      <ProductDetailPage key={p.number} product={p} />
+      <ProductDetailPage key={p.number} product={p} products={products} settings={settings} />
     ) : (
-      <div className="empty">Loading…</div>
+      <NotFoundPage products={products} storeName={settings.storeName} kind="product" />
     );
   } else if (route.view === "checkout") {
     page = (
@@ -141,6 +167,7 @@ export default function Storefront({ route }: { route: StoreRoute }) {
     <StoreUIProvider value={ui}>
       <div className={"store-frame" + (cartOpen ? " pushed" : "")}>
         <div className={"store" + (route.view === "confirmation" && lastOrder ? " store-confirmation" : "")}>
+          <a className="skip-link" href="#main">Skip to content</a>
           <PromoBanner />
           {settings?.announcement ? <div className="store-announcement">{settings.announcement}</div> : null}
           <header className="store-header">
@@ -154,25 +181,31 @@ export default function Storefront({ route }: { route: StoreRoute }) {
               >
                 <Icon name={mobileNav ? "close" : "menu"} />
               </button>
-            <button className="brand" onClick={goHome} aria-label="bridetouch home">
+            <a className="brand" href="/" onClick={linkHandler("shop", goHome)} aria-label={`${settings?.storeName ?? "bridetouch"} home`}>
               <BrandLogo src={settings?.logoImage} name={settings?.storeName} />
               <span className="brand-word">{settings?.storeName ?? "bridetouch"}.</span>
-            </button>
+            </a>
             <nav
               id="store-navigation"
               aria-label="Store navigation"
               className={"store-nav" + (mobileNav ? " open" : "")}
             >
-              <button onClick={goHome} className={route.view === "shop" ? "active" : ""}>
+              <a href="/" onClick={linkHandler("shop", goHome)} className={route.view === "shop" ? "active" : ""} aria-current={route.view === "shop" ? "page" : undefined}>
                 Home
-              </button>
-              <button
-                onClick={() => goToCategory("All")}
-                className={route.view === "catalog" ? "active" : ""}
+              </a>
+              <a
+                href="/catalog"
+                onClick={linkHandler("catalog", () => goToCategory("All"))}
+                className={route.view === "catalog" && storeCategory === "All" ? "active" : ""}
+                aria-current={route.view === "catalog" && storeCategory === "All" ? "page" : undefined}
               >
                 Shop all
-              </button>
-              {(settings?.navigation ?? [...new Set((products ?? []).map(product => product.category))].slice(0,2)).map(name => <button key={name} className={route.view === "catalog" && storeCategory === name ? "active" : ""} onClick={() => goToCategory(name)}>{name}</button>)}
+              </a>
+              {(settings?.navigation ?? [...new Set((products ?? []).map(product => product.category))].slice(0,2)).map(name => {
+                const href = "/catalog?category=" + encodeURIComponent(name);
+                const active = route.view === "catalog" && storeCategory === name;
+                return <a key={name} href={href} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={linkHandler(href, () => goToCategory(name))}>{name}</a>;
+              })}
               {settings?.supportUrl ? <a href={settings.supportUrl}>Support</a> : null}
               {socialLinks.length ? (
                 <div className="store-nav-social" aria-label="Social media">
@@ -212,7 +245,7 @@ export default function Storefront({ route }: { route: StoreRoute }) {
               >
                 <Icon name="bag" />
                 {cart.count ? (
-                  <span className="cart-count" aria-hidden="true">
+                  <span className="cart-count" key={cart.count} aria-hidden="true">
                     {cart.count}
                   </span>
                 ) : null}
@@ -220,7 +253,7 @@ export default function Storefront({ route }: { route: StoreRoute }) {
             </div>
           </header>
           {mobileNav ? <button className="store-menu-scrim" type="button" onClick={() => setMobileNav(false)} aria-label="Close navigation menu" /> : null}
-          <main id="main" className="page-animate">
+          <main id="main" className="page-animate" key={route.view + (route.productId ?? "") + storeCategory} tabIndex={-1}>
             {page}
           </main>
           {route.view !== "confirmation" || !lastOrder ? <StoreFooter settings={settings} /> : null}

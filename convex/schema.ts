@@ -108,5 +108,8 @@ export default defineSchema({
     freeShippingMin: v.optional(v.number()),
     notifications: v.boolean(),
     guestCheckout: v.boolean(),
+    // Highest product number ever issued, so a deleted product's number (and
+    // its old links) is never reused for a different product.
+    lastProductNumber: v.optional(v.number()),
   }),
 });

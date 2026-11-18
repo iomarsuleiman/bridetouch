@@ -6,7 +6,7 @@ import { shippingTotal } from "../src/store/totals";
 import { checkoutDiscount } from "../src/store/salePricing";
 import { matchVariant, priceForVariant, variantKey, variantLabel } from "../src/store/productVariants";
 import { requireAdmin } from "./access";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 
 const document = v.object({...schema.tables.orders.validator.fields,_id:v.id("orders"),_creationTime:v.number()});
@@ -38,7 +38,7 @@ export const createCheckout = mutation({
     if (!args.customer.trim() || !args.city.trim() || !args.address.trim()) throw new Error("Name, city and delivery address are required");
     const phone = normalizePhone(args.phone);
     if (!/^1[0125][0-9]{8}$/.test(phone)) throw new Error("Enter a valid Egyptian mobile number");
-    if (args.customer.length > 200 || args.address.length > 1000 || (args.notes?.length ?? 0) > 2000) throw new Error("Order details are too long");
+    if (args.customer.length > 200 || args.city.length > 200 || args.address.length > 1000 || (args.notes?.length ?? 0) > 2000) throw new Error("Order details are too long");
     if (!args.items.length || args.items.length > 50) throw new Error("Your bag must contain between 1 and 50 products");
 
     // Group by product AND exact variant. Never merge distinct colors or sizes.
@@ -108,9 +108,9 @@ export const createCheckout = mutation({
       status: "New",
       payment: "Unpaid",
       delivery: "Unfulfilled",
-      city: args.city,
-      address: args.address,
-      notes: args.notes,
+      city: args.city.trim(),
+      address: args.address.trim(),
+      notes: args.notes?.trim() || undefined,
       userId: identity?.subject,
     });
 
@@ -124,6 +124,28 @@ export const createCheckout = mutation({
   },
 });
 
+// Cancelling an order puts its items back on the shelf; reopening a cancelled
+// order takes them again (and fails if they have since sold out). Order lines
+// store the human-readable variant label, so rows are matched on that label.
+async function adjustStock(ctx: MutationCtx, order: Doc<"orders">, direction: 1 | -1) {
+  for (const item of order.items) {
+    const product = await ctx.db.query("products").withIndex("by_number", (q) => q.eq("number", item.number)).first();
+    if (!product) continue; // product deleted since; nothing to restock
+    const delta = direction * item.qty;
+    if (product.options?.length && item.variant) {
+      const variants = product.variants?.map((row) => ({ ...row, values: [...row.values] })) ?? [];
+      const row = variants.find((entry) => variantLabel(product, entry.values) === item.variant);
+      if (!row) continue;
+      if (row.stock + delta < 0) throw new Error(`Only ${row.stock} left of ${product.name} (${item.variant})`);
+      row.stock += delta;
+      await ctx.db.patch(product._id, { variants, stock: Math.max(0, product.stock + delta) });
+    } else {
+      if (product.stock + delta < 0) throw new Error(`Only ${product.stock} left of ${product.name}`);
+      await ctx.db.patch(product._id, { stock: product.stock + delta });
+    }
+  }
+}
+
 export const updateStatus = mutation({
   args: {
     id: v.id("orders"),
@@ -136,6 +158,12 @@ export const updateStatus = mutation({
     await requireAdmin(ctx);
     if (status && !["New","Confirmed","Making","Packed","Shipped","Delivered","Cancelled"].includes(status)) throw new Error("Invalid order status");
     if (payment && !["Unpaid","Collected","Settled"].includes(payment)) throw new Error("Invalid payment status");
+    const order = await ctx.db.get(id);
+    if (!order) throw new Error("Order not found");
+    if (status !== undefined && status !== order.status) {
+      if (status === "Cancelled") await adjustStock(ctx, order, 1);
+      else if (order.status === "Cancelled") await adjustStock(ctx, order, -1);
+    }
     const patch: Record<string, string> = {};
     if (status !== undefined) patch.status = status;
     if (payment !== undefined) patch.payment = payment;
@@ -163,8 +191,8 @@ export const createManual = mutation({
       .first();
     return await ctx.db.insert("orders", {
       number: (max?.number ?? 1020) + 1,
-      customer: args.name,
-      phone: args.phone,
+      customer: args.name.trim(),
+      phone: normalizePhone(args.phone),
       date: new Date().toISOString(),
       placedAt: Date.now(),
       items: [],
@@ -172,8 +200,8 @@ export const createManual = mutation({
       status: "New",
       payment: "Unpaid",
       delivery: "Unfulfilled",
-      city: args.city,
-      address: args.city,
+      city: args.city.trim(),
+      address: args.city.trim(),
     });
   },
 });

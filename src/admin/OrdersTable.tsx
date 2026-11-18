@@ -32,7 +32,7 @@ export function OrdersTable({
               <tr key={o._id}>
                 <td>
                   <button className="text-button" onClick={() => onOpen(o._id)}>
-                    #ML-{o.number}
+                    #BT-{o.number}
                   </button>
                 </td>
                 <td>
@@ -53,7 +53,7 @@ export function OrdersTable({
                   <button
                     className="row-action"
                     onClick={() => onOpen(o._id)}
-                    aria-label={"Open order ML-" + o.number}
+                    aria-label={"Open order BT-" + o.number}
                   >
                     <Icon name="right" />
                   </button>
@@ -74,7 +74,7 @@ export function OrdersTable({
             <span className="customer-avatar">{o.customer.charAt(0)}</span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <strong>
-                #ML-{o.number} · {o.customer}
+                #BT-{o.number} · {o.customer}
               </strong>
               <small>{formatOrderDate(o.date)}</small>
             </span>

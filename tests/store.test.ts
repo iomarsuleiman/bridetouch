@@ -164,3 +164,47 @@ test("new products create reusable category records", async () => {
   await admin.mutation(api.products.add, { name: "Other ring", category: "Accessories", price: 150, stock: 1 });
   expect((await t.query(api.categories.list, {})).filter((category) => category.name === "Accessories")).toHaveLength(1);
 });
+
+test("cancelling an order restocks it and reopening takes the stock again",async()=>{
+ const t=await setup();
+ const admin=t.withIdentity({subject:"owner",email:"owner@example.com"});
+ await t.run(async ctx=>{await ctx.db.insert("products",{number:2,name:"Veil",category:"Bridal",price:50,stock:2,options:[{name:"Size",values:["S","M"]}],variants:[{values:["S"],stock:1},{values:["M"],stock:1}]});});
+ const order=await t.mutation(api.orders.createCheckout,{...customer,items:[{number:1,qty:2},{number:2,qty:1,variant:["M"]}]});
+ const stock=async()=>{const a=await t.query(api.products.getByNumber,{number:1});const b=await t.query(api.products.getByNumber,{number:2});return [a?.stock,b?.variants?.find(v=>v.values[0]==="M")?.stock,b?.stock];};
+ expect(await stock()).toEqual([1,0,1]);
+ await admin.mutation(api.orders.updateStatus,{id:order!._id,status:"Cancelled"});
+ expect(await stock()).toEqual([3,1,2]);
+ await admin.mutation(api.orders.updateStatus,{id:order!._id,status:"Cancelled"});
+ expect(await stock()).toEqual([3,1,2]);
+ await admin.mutation(api.orders.updateStatus,{id:order!._id,status:"Confirmed"});
+ expect(await stock()).toEqual([1,0,1]);
+ await admin.mutation(api.orders.updateStatus,{id:order!._id,status:"Cancelled"});
+ await t.mutation(api.orders.createCheckout,{...customer,items:[{number:1,qty:3}]});
+ await expect(admin.mutation(api.orders.updateStatus,{id:order!._id,status:"New"})).rejects.toThrow("Only 0 left");
+});
+
+test("deleting a product keeps order history and never reuses its number",async()=>{
+ const t=await setup();
+ const admin=t.withIdentity({subject:"owner",email:"owner@example.com"});
+ const order=await t.mutation(api.orders.createCheckout,{...customer});
+ const id=await admin.mutation(api.products.add,{name:"Tiara",category:"Bridal",price:900,stock:1});
+ const tiara=(await t.query(api.products.list,{})).find(p=>p._id===id)!;
+ await expect(t.mutation(api.products.remove,{id})).rejects.toThrow("Administrator");
+ await admin.mutation(api.products.remove,{id});
+ expect((await t.query(api.products.list,{})).some(p=>p._id===id)).toBe(false);
+ const next=await admin.mutation(api.products.add,{name:"Veil",category:"Bridal",price:400,stock:1});
+ expect((await t.query(api.products.list,{})).find(p=>p._id===next)!.number).toBeGreaterThan(tiara.number);
+ const orders=await admin.query(api.orders.list,{});expect(orders.find(o=>o._id===order!._id)?.items[0].name).toBe("Real piece");
+});
+
+test("wiping store data needs the exact confirmation and keeps settings",async()=>{
+ const t=await setup();
+ await t.mutation(api.orders.createCheckout,{...customer});
+ const dry=await t.mutation(internal.maintenance.wipeStoreData,{});
+ expect(dry.find(r=>r.table==="products")).toEqual({table:"products",deleted:0,remaining:1});
+ const done=await t.mutation(internal.maintenance.wipeStoreData,{confirm:"DELETE ALL STORE DATA"});
+ expect(done.every(r=>r.remaining===0)).toBe(true);
+ expect(await t.query(api.products.list,{})).toHaveLength(0);
+ expect((await t.query(api.settings.get,{}))?.storeName).toBe("bridetouch");
+ expect(await t.withIdentity({subject:"owner",email:"owner@example.com"}).query(api.access.current,{})).toBe(true);
+});
