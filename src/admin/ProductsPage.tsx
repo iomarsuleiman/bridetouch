@@ -3,13 +3,28 @@ import { Badge } from "../components/Badge";
 import { Icon } from "../components/Icon";
 import { money } from "../lib/format";
 import { SmartImage } from "../components/SmartImage";
-import { Heading } from "./shared";
+import { DeleteButton, Heading } from "./shared";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+import { useToast } from "../components/Toast";
+import { friendlyError } from "../lib/format";
 import type { AdminCtx } from "./types";
 
 // Port of the vanilla productsPage().
 export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
   const [tab, setTab] = useState("All");
   const [query, setQuery] = useState("");
+  const toast = useToast();
+  const remove = useMutation(api.products.remove);
+  async function deleteProduct(id: Id<"products">, name: string) {
+    try {
+      await remove({ id });
+      toast(`${name} deleted`);
+    } catch (error) {
+      toast(friendlyError(error, "Could not delete product"));
+    }
+  }
   const tabs = ["All", "In stock", "Low stock", "Sold out"];
   const q = query.trim().toLowerCase();
   const items = ctx.products.filter(
@@ -104,13 +119,17 @@ export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
                   <td>{p.category}</td>
                   <td>{money(p.price)}</td>
                   <td>
-                    <button
-                      className="row-action"
-                      onClick={() => ctx.openEditProduct(p._id)}
-                      aria-label={"Edit " + p.name}
-                    >
-                      <Icon name="edit" />
-                    </button>
+                    <span className="row-actions">
+                      <button
+                        className="row-action"
+                        onClick={() => ctx.openEditProduct(p._id)}
+                        aria-label={"Edit " + p.name}
+                        title="Edit"
+                      >
+                        <Icon name="edit" />
+                      </button>
+                      <DeleteButton label="" onDelete={() => deleteProduct(p._id, p.name)} />
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -119,10 +138,10 @@ export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
         </div>
         <div className="mobile-cards">
           {items.map((p) => (
+            <div key={p._id} className="mobile-product-row">
             <button
-              key={p._id}
               className="mobile-data"
-              style={{ width: "100%", textAlign: "left" }}
+              style={{ flex: 1, minWidth: 0, textAlign: "left" }}
               onClick={() => ctx.openEditProduct(p._id)}
             >
               <SmartImage style={{ width: 45, height: 50, objectFit: "cover", borderRadius: 8, flex: "none" }} src={p.img} alt="" />
@@ -135,6 +154,8 @@ export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
               <strong>{money(p.price)}</strong>
               <Icon name="right" size="sm" />
             </button>
+            <DeleteButton label="" onDelete={() => deleteProduct(p._id, p.name)} />
+            </div>
           ))}
         </div>
         {items.length ? null : (

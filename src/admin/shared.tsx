@@ -240,6 +240,7 @@ export function DeleteButton({ label = "Delete", onDelete, small = true }: { lab
       className={"btn ghost" + (small ? " small" : "") + (armed ? " danger" : " danger-text")}
       disabled={busy}
       aria-live="polite"
+      aria-label={armed ? "Confirm delete" : label || "Delete"}
       onClick={async () => {
         if (!armed) return setArmed(true);
         setBusy(true);
@@ -251,7 +252,7 @@ export function DeleteButton({ label = "Delete", onDelete, small = true }: { lab
         }
       }}
     >
-      {busy ? "Deleting…" : armed ? "Tap again to delete" : <><Icon name="trash" size="sm" /> {label}</>}
+      {busy ? "…" : armed ? (label ? "Tap again to delete" : "Delete?") : <><Icon name="trash" size="sm" />{label ? " " + label : null}</>}
     </button>
   );
 }
