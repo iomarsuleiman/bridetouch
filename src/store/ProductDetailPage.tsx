@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type React from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { saleDiscount } from "./salePricing";
@@ -46,6 +47,9 @@ export function ProductDetailPage({
   const saleSavings = saleDiscount([{ number: p.number, subtotal: unitPrice }], sales, collections, Date.now());
   const quantitySavings = saleDiscount([{ number: p.number, subtotal: unitPrice * qty }], sales, collections, Date.now());
   const valid = !hasOptions || !!selectedVariant;
+  const photos = [p.img, ...(p.images ?? [])].filter((x): x is string => !!x);
+  const compareAt = p.compareAtPrice && p.compareAtPrice > unitPrice ? p.compareAtPrice : 0;
+  const whatsapp = settings.whatsapp?.replace(/\D/g, "");
   const soldOut = stock <= 0;
 
   useSeo(
@@ -63,7 +67,7 @@ export function ProductDetailPage({
     "@type": "Product",
     name: p.name,
     description: p.description || undefined,
-    image: p.img ? [new URL(p.img, location.origin).href] : undefined,
+    image: [p.img, ...(p.images ?? [])].filter(Boolean).map((src) => new URL(src!, location.origin).href),
     sku: "BT-" + String(p.number).padStart(3, "0"),
     category: p.category,
     brand: { "@type": "Brand", name: storeName ?? "bridetouch" },
@@ -120,15 +124,14 @@ export function ProductDetailPage({
             <span aria-hidden="true">/</span>
             <a href={categoryHref} onClick={linkHandler(categoryHref, () => goToCategory(p.category))}>{p.category}</a>
           </nav>
-          <div className="detail-image-wrap">
-            <SmartImage className="detail-image" src={p.img} alt={p.name} fetchPriority="high" />
-            {soldOut ? <span className="tile-tag sold">Sold out</span> : saleSavings ? <span className="tile-tag sale">{Math.round((saleSavings / unitPrice) * 100)}% off</span> : null}
-          </div>
+          <Gallery images={photos} name={p.name} badge={soldOut ? <span className="tile-tag sold">Sold out</span> : saleSavings ? <span className="tile-tag sale">{Math.round((saleSavings / unitPrice) * 100)}% off</span> : compareAt ? <span className="tile-tag sale">Save {money(compareAt - unitPrice)}</span> : null} />
         </div>
         <div className="detail-info">
           <h1>{p.name}</h1>
           <div className="price">
-            {saleSavings ? <><s className="old-price">{money(unitPrice)}</s> <span className="sale-price">{money(unitPrice - saleSavings)}</span></> : money(unitPrice)}
+            {saleSavings ? <><s className="old-price">{money(compareAt || unitPrice)}</s> <span className="sale-price">{money(unitPrice - saleSavings)}</span></>
+              : compareAt ? <><s className="old-price">{money(compareAt)}</s> <span className="sale-price">{money(unitPrice)}</span></>
+                : money(unitPrice)}
           </div>
           {p.description ? <p className="desc">{p.description}</p> : null}
           {hasOptions
@@ -193,6 +196,11 @@ export function ProductDetailPage({
               </button>
             )}
           </div>
+          {whatsapp ? (
+            <a className="ask-link" href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(`Hi! I have a question about ${p.name}: ${location.origin}/product/${p.number}`)}`} target="_blank" rel="noopener noreferrer">
+              <Icon name="phone" size="sm" /> Ask about this piece on WhatsApp
+            </a>
+          ) : null}
           <ul className="detail-notes">
             <li><Icon name="wallet" size="sm" /> Cash on delivery</li>
             <li><Icon name="truck" size="sm" /> {settings.freeShipping ? `Free delivery over ${money(settings.freeShippingMin ?? 800)}` : `Delivery ${money(settings.shipping)}`}</li>
@@ -208,5 +216,52 @@ export function ProductDetailPage({
         </section>
       ) : null}
     </>
+  );
+}
+
+/** Photo gallery: swipe on phones (scroll-snap), arrows and thumbnails on
+ *  computers. One photo shows plainly, with no controls. */
+function Gallery({ images, name, badge }: { images: string[]; name: string; badge: React.ReactNode }) {
+  const [index, setIndex] = useState(0);
+  const track = useRef<HTMLDivElement>(null);
+  const go = (next: number) => {
+    const i = (next + images.length) % images.length;
+    setIndex(i);
+    const el = track.current;
+    if (el) el.scrollTo({ left: el.clientWidth * i, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
+  return (
+    <div className="gallery">
+      <div className="detail-image-wrap">
+        <div className="gallery-track" ref={track} onScroll={(e) => {
+          const el = e.currentTarget;
+          const i = Math.round(el.scrollLeft / el.clientWidth);
+          if (i !== index) setIndex(i);
+        }}>
+          {(images.length ? images : [""]).map((src, i) => (
+            <div className="gallery-slide" key={i} aria-hidden={i !== index}>
+              <SmartImage className="detail-image" src={src} alt={i === 0 ? name : `${name}, photo ${i + 1}`} loading={i === 0 ? "eager" : "lazy"} fetchPriority={i === 0 ? "high" : undefined} />
+            </div>
+          ))}
+        </div>
+        {badge}
+        {images.length > 1 ? (
+          <>
+            <button type="button" className="gallery-arrow prev" aria-label="Previous photo" onClick={() => go(index - 1)}><Icon name="left" size="sm" /></button>
+            <button type="button" className="gallery-arrow next" aria-label="Next photo" onClick={() => go(index + 1)}><Icon name="right" size="sm" /></button>
+            <div className="gallery-dots" aria-hidden="true">{images.map((_, i) => <i key={i} className={i === index ? "on" : ""} />)}</div>
+          </>
+        ) : null}
+      </div>
+      {images.length > 1 ? (
+        <div className="gallery-thumbs" role="tablist" aria-label="Product photos">
+          {images.map((src, i) => (
+            <button key={i} type="button" role="tab" aria-selected={i === index} aria-label={`Photo ${i + 1}`} className={i === index ? "on" : ""} onClick={() => go(i)}>
+              <SmartImage src={src} alt="" loading="lazy" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }

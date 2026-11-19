@@ -16,6 +16,13 @@ export default defineSchema({
     // combination with its own stock. `values` is aligned with `options`.
     options: v.optional(v.array(v.object({ name: v.string(), values: v.array(v.string()) }))),
     variants: v.optional(v.array(v.object({ values: v.array(v.string()), stock: v.number(), price: v.optional(v.number()) }))),
+    // "active" (default when missing) is for sale; "draft" is hidden while
+    // you prepare it; "archived" is retired but kept for history.
+    status: v.optional(v.string()),
+    // Extra gallery photos; `img` stays the cover image.
+    images: v.optional(v.array(v.string())),
+    sku: v.optional(v.string()),
+    compareAtPrice: v.optional(v.number()),
   }).index("by_number", ["number"]),
   categories: defineTable({
     name: v.string(),
@@ -41,6 +48,16 @@ export default defineSchema({
     address: v.string(),
     notes: v.optional(v.string()),
     userId: v.optional(v.string()),
+    email: v.optional(v.string()),
+    zone: v.optional(v.string()),
+    deliveredAt: v.optional(v.number()),
+    tracking: v.optional(v.object({ carrier: v.string(), number: v.string(), url: v.optional(v.string()) })),
+    returnRequest: v.optional(v.object({
+      reason: v.string(),
+      at: v.number(),
+      status: v.string(), // Requested | Approved | Rejected | Refunded
+      note: v.optional(v.string()),
+    })),
   })
     .index("by_number", ["number"])
     .index("by_user", ["userId"]),
@@ -77,6 +94,16 @@ export default defineSchema({
     message: v.string(),
     actor: v.optional(v.string()),
   }).index("by_at", ["at"]),
+  // Store pages: About, FAQ and policies (privacy, terms, returns, shipping).
+  pages: defineTable({
+    slug: v.string(),
+    title: v.string(),
+    body: v.string(), // simple Markdown: # headings, - lists, **bold**, [links](url)
+    published: v.boolean(),
+    position: v.number(),
+    kind: v.optional(v.string()), // "policy" | "page"
+    updatedAt: v.number(),
+  }).index("by_slug", ["slug"]).index("by_position", ["position"]),
   collections: defineTable({
     name: v.string(),
     image: v.string(),
@@ -101,6 +128,21 @@ export default defineSchema({
     catalogDescription: v.optional(v.string()),
     announcement: v.optional(v.string()),
     navigation: v.optional(v.array(v.string())),
+    // Typed header links. Supersedes `navigation` once saved.
+    navLinks: v.optional(v.array(v.object({
+      label: v.string(),
+      type: v.string(), // home | catalog | category | collection | product | page | track | url
+      target: v.optional(v.string()),
+      hidden: v.optional(v.boolean()),
+    }))),
+    // Delivery zones (e.g. governorates). When any are enabled, customers
+    // pick one at checkout and its fee replaces the flat `shipping` fee.
+    zones: v.optional(v.array(v.object({ name: v.string(), fee: v.number(), eta: v.optional(v.string()), enabled: v.boolean() }))),
+    phone: v.optional(v.string()),
+    whatsapp: v.optional(v.string()),
+    address: v.optional(v.string()),
+    returnDays: v.optional(v.number()),
+    accentColor: v.optional(v.string()),
     email: v.string(),
     city: v.string(),
     shipping: v.number(),

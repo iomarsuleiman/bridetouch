@@ -12,10 +12,10 @@ export function OrdersPage({ ctx }: { ctx: AdminCtx }) {
   const [tab, setTab] = useState("All");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All");
-  const tabs = ["All", "New", "Confirmed", "Making", "Packed", "Shipped", "Delivered", "Cancelled"];
+  const tabs = ["All", "New", "Confirmed", "Making", "Packed", "Shipped", "Delivered", "Returns", "Cancelled"];
   const filtered = ctx.orders.filter(
     (o) =>
-      (tab === "All" || o.status === tab) &&
+      (tab === "All" || (tab === "Returns" ? !!o.returnRequest : o.status === tab)) &&
       (filter === "All" || o.payment === filter) &&
       (!query.trim() || ("BT-" + o.number + " " + o.number + " " + o.customer + " " + o.phone + " 0" + o.phone + " " + o.city).toLowerCase().includes(query.trim().toLowerCase())),
   );
@@ -41,7 +41,9 @@ export function OrdersPage({ ctx }: { ctx: AdminCtx }) {
               className={"tab" + (tab === t ? " active" : "")}
               onClick={() => setTab(t)}
             >
-              {t}{t !== "All" && ctx.orders.some((o) => o.status === t) ? <span className="tab-count">{ctx.orders.filter((o) => o.status === t).length}</span> : null}
+              {t}{t === "Returns"
+                ? (ctx.orders.some((o) => o.returnRequest?.status === "Requested") ? <span className="tab-count alert">{ctx.orders.filter((o) => o.returnRequest?.status === "Requested").length}</span> : null)
+                : t !== "All" && ctx.orders.some((o) => o.status === t) ? <span className="tab-count">{ctx.orders.filter((o) => o.status === t).length}</span> : null}
             </button>
           ))}
         </div>

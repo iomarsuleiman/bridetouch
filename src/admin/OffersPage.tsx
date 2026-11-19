@@ -16,15 +16,15 @@ export function OffersPage({ ctx }: { ctx: AdminCtx }) {
   return (
     <>
       <Heading
-        title="Offers & campaigns"
-        subtitle="Create a reason to come back."
+        title="Banners"
+        subtitle="Promotional messages in the banner at the top of your store. To actually discount prices, use Sales or Discount codes."
         actions={
           <button className="btn primary" type="button" onClick={() => ctx.openModal("add-offer")}>
-            <Icon name="plus" size="sm" /> New offer
+            <Icon name="plus" size="sm" /> New banner
           </button>
         }
       />
-      {!ctx.offers.length ? <div className="empty">No offers yet. Active offers show in the banner at the top of your shop.</div> : null}
+      {!ctx.offers.length ? <div className="empty">No banners yet. An active banner shows across the top of your store, e.g. “Free gift wrapping this week”.</div> : null}
       <div className="card-list">
         {ctx.offers.map((o) => (
           <article key={o._id} className="offer-card">

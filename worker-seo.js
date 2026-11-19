@@ -9,8 +9,8 @@
 //   • answers unknown pages and missing products with a real 404 status.
 // If the backend can't be reached, the page is served unchanged (never a 404).
 
-const NOINDEX_VIEWS = new Set(["checkout", "confirmation"]);
-const STORE_VIEWS = new Set(["", "shop", "catalog", "checkout", "confirmation"]);
+const NOINDEX_VIEWS = new Set(["checkout", "confirmation", "track"]);
+const STORE_VIEWS = new Set(["", "shop", "catalog", "checkout", "confirmation", "track"]);
 
 export function isAssetPath(pathname) {
   return pathname.startsWith("/assets/") || /\.[a-zA-Z0-9]{1,12}$/.test(pathname);
@@ -25,6 +25,10 @@ export function classify(pathname) {
     return Number.isSafeInteger(number) && number > 0 && bits.length === 2
       ? { view: "product", number }
       : { view: "notfound", noindex: true };
+  }
+  if (bits[0] === "pages") {
+    const slug = decodeURIComponent(bits[1] ?? "");
+    return slug && bits.length === 2 ? { view: "page", slug } : { view: "notfound", noindex: true };
   }
   if (bits.length > 1 || !STORE_VIEWS.has(bits[0])) return { view: "notfound", noindex: true };
   const view = bits[0] || "shop";
@@ -68,6 +72,7 @@ export function robotsTxt(origin) {
     "Disallow: /admin",
     "Disallow: /checkout",
     "Disallow: /confirmation",
+    "Disallow: /track",
     "",
     `Sitemap: ${origin}/sitemap.xml`,
     "",
@@ -76,12 +81,14 @@ export function robotsTxt(origin) {
 
 export async function sitemapXml(origin, convexUrl) {
   const products = (await convexQuery(convexUrl, "products:list")) ?? [];
+  const pages = (await convexQuery(convexUrl, "pages:listPublished").catch(() => [])) ?? [];
   const categories = [...new Set(products.map((p) => p.category).filter(Boolean))];
   const urls = [
     { loc: `${origin}/`, priority: "1.0" },
     { loc: `${origin}/catalog`, priority: "0.9" },
     ...categories.map((c) => ({ loc: `${origin}/catalog?category=${encodeURIComponent(c)}`, priority: "0.7" })),
     ...products.map((p) => ({ loc: `${origin}/product/${p.number}`, priority: p.stock > 0 ? "0.8" : "0.4", image: p.img })),
+    ...pages.map((p) => ({ loc: `${origin}/pages/${encodeURIComponent(p.slug)}`, priority: "0.5" })),
   ];
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
@@ -109,6 +116,13 @@ async function pageMeta(url, route, convexUrl) {
   };
   if (route.view === "notfound") return { ...base, title: `Page not found · ${store}`, status: 404 };
   if (route.view === "checkout") return { ...base, title: `Checkout · ${store}` };
+  if (route.view === "track") return { ...base, title: `Track your order · ${store}` };
+  if (route.view === "page") {
+    const page = await convexQuery(convexUrl, "pages:getBySlug", { slug: route.slug });
+    if (!page) return { ...base, title: `Page not found · ${store}`, status: 404, noindex: true };
+    const text = String(page.body).replace(/[#*_>\[\]()`-]/g, " ");
+    return { ...base, title: `${page.title} · ${store}`, description: clip(text) };
+  }
   if (route.view === "confirmation") return { ...base, title: `Order confirmed · ${store}` };
   if (route.view === "catalog") {
     const category = url.searchParams.get("category");

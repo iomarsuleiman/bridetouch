@@ -44,6 +44,13 @@ export function CheckoutPage({
   const [street, setStreet] = useState(saved.street ?? "");
   const [address, setAddress] = useState(saved.address ?? "");
   const [notes, setNotes] = useState("");
+  const [email, setEmail] = useState(saved.email ?? "");
+  const [website, setWebsite] = useState(""); // bot trap, hidden from people
+  const zones = (settings.zones ?? []).filter((z) => z.enabled);
+  const [zone, setZone] = useState(() => (saved.zone && zones.some((z) => z.name === saved.zone) ? saved.zone : ""));
+  const chosenZone = zones.find((z) => z.name === zone);
+  const policies = useQuery(api.pages.listPublished) ?? [];
+  const policyLinks = policies.filter((p) => p.kind === "policy");
   const [remember, setRemember] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -65,7 +72,7 @@ export function CheckoutPage({
     return product ? [{ number: item.number, subtotal: priceForVariant(product, item.variant) * item.qty }] : [];
   });
   const subtotal = lines.reduce((sum, line) => sum + line.subtotal, 0);
-  const shipping = shippingTotal(subtotal, settings);
+  const shipping = shippingTotal(subtotal, chosenZone ? { ...settings, shipping: chosenZone.fee } : settings);
   const discount = checkoutDiscount(lines, appliedCoupon, sales, collections, Date.now());
   const total = Math.max(0, subtotal + shipping - discount);
 
@@ -92,6 +99,11 @@ export function CheckoutPage({
       document.getElementById("customerPhone")?.focus();
       return;
     }
+    if (zones.length && !chosenZone) {
+      setError("Choose your delivery area.");
+      document.getElementById("customerZone")?.focus();
+      return;
+    }
     if (stockProblems.length) {
       setError("Some pieces in your bag are no longer available in that quantity. Update your bag to continue.");
       return;
@@ -108,10 +120,13 @@ export function CheckoutPage({
         items: cart.items.map((i) => ({ number: i.number, qty: i.qty, variant: i.variant })),
         couponCode: appliedCoupon?.code,
         userId: userId ?? undefined,
+        email: email.trim() || undefined,
+        zone: chosenZone?.name,
+        website: website || undefined,
       });
       if (!order) throw new Error("Order could not be created");
       try {
-        if (remember) localStorage.setItem(DETAILS_KEY, JSON.stringify({ name, phone: normalizePhone(phone), city, street, address }));
+        if (remember) localStorage.setItem(DETAILS_KEY, JSON.stringify({ name, phone: normalizePhone(phone), city, street, address, email, zone }));
         else localStorage.removeItem(DETAILS_KEY);
       } catch {
         // storage blocked
@@ -175,6 +190,18 @@ export function CheckoutPage({
               </small>
             </div>
           </div>
+          {zones.length ? (
+            <div className="field">
+              <label htmlFor="customerZone">Delivery area</label>
+              <select id="customerZone" required value={zone} onChange={(e) => setZone(e.target.value)} aria-describedby="zone-hint">
+                <option value="" disabled>Choose your area…</option>
+                {zones.map((z) => (
+                  <option key={z.name} value={z.name}>{z.name} · {z.fee ? money(z.fee) : "Free"}{z.eta ? ` · ${z.eta}` : ""}</option>
+                ))}
+              </select>
+              <small id="zone-hint" className="field-hint">{chosenZone?.eta ? `Usually arrives in ${chosenZone.eta}.` : "Delivery fee depends on your area."}</small>
+            </div>
+          ) : null}
           <div className="grid-2">
             <div className="field">
               <label htmlFor="customerCity">City / Area</label>
@@ -243,6 +270,14 @@ export function CheckoutPage({
             </div>
             <Icon name="check" size="sm" />
           </div>
+          <div className="field">
+            <label htmlFor="customerEmail">Email <span className="muted">(optional)</span></label>
+            <input id="customerEmail" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next" maxLength={200} placeholder="For your receipt and order updates" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="hp-field" aria-hidden="true">
+            <label htmlFor="website">Website</label>
+            <input id="website" name="website" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
+          </div>
           <label className="remember-row">
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
             <span>Remember my details on this device</span>
@@ -280,6 +315,9 @@ export function CheckoutPage({
           </button>
           <small className="muted">
             By placing your order you agree to pay {money(total)} in cash when it arrives. We'll call to confirm before shipping.
+            {policyLinks.length ? <> See our {policyLinks.map((p, i) => (
+              <span key={p.slug}>{i ? (i === policyLinks.length - 1 ? " and " : ", ") : ""}<a href={`/pages/${p.slug}`} target="_blank" rel="noopener">{p.title.toLowerCase()}</a></span>
+            ))}.</> : null}
           </small>
         </form>
       </div>
@@ -304,7 +342,7 @@ export function CheckoutPage({
           <strong>{money(subtotal)}</strong>
         </div>
         <div className="sumline">
-          <span>Delivery</span>
+          <span>Delivery{chosenZone ? ` · ${chosenZone.name}` : zones.length ? " (choose area)" : ""}</span>
           <strong>{shipping ? money(shipping) : "Free"}</strong>
         </div>
         {discount ? (
@@ -323,7 +361,7 @@ export function CheckoutPage({
 }
 
 const DETAILS_KEY = "bridetouch-checkout-details";
-type SavedDetails = { name?: string; phone?: string; city?: string; street?: string; address?: string };
+type SavedDetails = { name?: string; phone?: string; city?: string; street?: string; address?: string; email?: string; zone?: string };
 function readSavedDetails(): SavedDetails {
   try {
     return JSON.parse(localStorage.getItem(DETAILS_KEY) || "{}") ?? {};

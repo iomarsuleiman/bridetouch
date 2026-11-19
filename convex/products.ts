@@ -1,5 +1,5 @@
 import schema from "./schema";
-import { requireAdmin } from "./access";
+import { isAdmin, requireAdmin } from "./access";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
@@ -7,24 +7,55 @@ const document = v.object({ ...schema.tables.products.validator.fields, _id: v.i
 const optionArg = v.object({ name: v.string(), values: v.array(v.string()) });
 const variantArg = v.object({ values: v.array(v.string()), stock: v.number(), price: v.optional(v.number()) });
 
+export const isForSale = (product: { status?: string }) => !product.status || product.status === "active";
+const STATUSES = ["active", "draft", "archived"];
+
+/** What shoppers see: active products only. */
 export const list = query({
   args: {},
   returns: v.array(document),
   handler: async (ctx) => {
+    const all = await ctx.db.query("products").withIndex("by_number").take(5000);
+    return all.filter(isForSale);
+  },
+});
+
+/** Every product including drafts and archived ones (dashboard). */
+export const listAll = query({
+  args: {},
+  returns: v.array(document),
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
     return await ctx.db.query("products").withIndex("by_number").take(5000);
   },
 });
 
+/** Drafts are visible to administrators only, so they can preview them. */
 export const getByNumber = query({
   args: { number: v.number() },
   returns: v.union(document, v.null()),
   handler: async (ctx, { number }) => {
-    return await ctx.db
+    const product = await ctx.db
       .query("products")
       .withIndex("by_number", (q) => q.eq("number", number))
       .first();
+    if (!product) return null;
+    if (isForSale(product) || (await isAdmin(ctx))) return product;
+    return null;
   },
 });
+
+function cleanExtras(args: { status?: string; images?: string[]; sku?: string; compareAtPrice?: number; price: number }) {
+  const status = args.status ?? "active";
+  if (!STATUSES.includes(status)) throw new Error("Unknown product status");
+  const images = [...new Set((args.images ?? []).map((url) => url.trim()).filter(Boolean))];
+  if (images.length > 12) throw new Error("Use up to 12 extra photos");
+  if (images.some((url) => url.length > 2000 || !/^(https:\/\/|\/)/i.test(url))) throw new Error("Photos must be https:// links");
+  const sku = args.sku?.trim().slice(0, 40) || undefined;
+  const compareAtPrice = args.compareAtPrice && args.compareAtPrice > args.price ? args.compareAtPrice : undefined;
+  if (args.compareAtPrice !== undefined && (!Number.isFinite(args.compareAtPrice) || args.compareAtPrice < 0)) throw new Error("Compare-at price must be zero or greater");
+  return { status, images: images.length ? images : undefined, sku, compareAtPrice };
+}
 
 // Options are arbitrary (Color, Size, Material…) — values are kept in the
 // order the admin typed them, and each combination becomes a stock row.
@@ -93,6 +124,10 @@ export const add = mutation({
     description: v.optional(v.string()),
     options: v.optional(v.array(optionArg)),
     variants: v.optional(v.array(variantArg)),
+    status: v.optional(v.string()),
+    images: v.optional(v.array(v.string())),
+    sku: v.optional(v.string()),
+    compareAtPrice: v.optional(v.number()),
   },
   returns: v.id("products"),
   handler: async (ctx, args) => {
@@ -126,6 +161,7 @@ export const add = mutation({
       description: args.description,
       options: options.length ? options : undefined,
       variants,
+      ...cleanExtras(args),
     });
   },
 });
@@ -141,6 +177,10 @@ export const update = mutation({
     description: v.optional(v.string()),
     options: v.optional(v.array(optionArg)),
     variants: v.optional(v.array(variantArg)),
+    status: v.optional(v.string()),
+    images: v.optional(v.array(v.string())),
+    sku: v.optional(v.string()),
+    compareAtPrice: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -163,6 +203,7 @@ export const update = mutation({
       description: args.description,
       options: options.length ? options : undefined,
       variants,
+      ...cleanExtras(args),
     });
     return null;
   },
@@ -184,6 +225,18 @@ export const remove = mutation({
         await ctx.db.patch(collection._id, { productNumbers: collection.productNumbers.filter((n) => n !== product.number) });
       }
     }
+    return null;
+  },
+});
+
+/** Quick status change from the product list (publish, unpublish, archive). */
+export const setStatus = mutation({
+  args: { id: v.id("products"), status: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { id, status }) => {
+    await requireAdmin(ctx);
+    if (!STATUSES.includes(status)) throw new Error("Unknown product status");
+    await ctx.db.patch(id, { status });
     return null;
   },
 });

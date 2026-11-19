@@ -1,12 +1,12 @@
 import type React from "react";
 import { useEffect, useState } from "react";
 
-export type StoreView = "shop" | "catalog" | "product" | "checkout" | "confirmation" | "notfound";
+export type StoreView = "shop" | "catalog" | "product" | "checkout" | "confirmation" | "page" | "track" | "notfound";
 export type Route =
-  | { area: "store"; view: StoreView; productId?: number }
+  | { area: "store"; view: StoreView; productId?: number; slug?: string }
   | { area: "admin"; view: string };
 
-const STORE_VIEWS = new Set(["shop", "catalog", "checkout", "confirmation"]);
+const STORE_VIEWS = new Set(["shop", "catalog", "checkout", "confirmation", "track"]);
 
 function parse(pathname: string): Route {
   const bits = pathname.replace(/^\/+|\/+$/g, "").split("/");
@@ -19,6 +19,10 @@ function parse(pathname: string): Route {
     return Number.isSafeInteger(productId) && productId > 0 && bits.length === 2
       ? { area: "store", view: "product", productId }
       : { area: "store", view: "notfound" };
+  }
+  if (view === "pages") {
+    const slug = decodeURIComponent(bits[1] ?? "");
+    return slug && bits.length === 2 ? { area: "store", view: "page", slug } : { area: "store", view: "notfound" };
   }
   if (bits.length > 1 || !STORE_VIEWS.has(view)) return { area: "store", view: "notfound" };
   return { area: "store", view: view as StoreView };

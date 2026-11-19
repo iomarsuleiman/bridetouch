@@ -16,6 +16,7 @@ import type * as coupons from "../coupons.js";
 import type * as maintenance from "../maintenance.js";
 import type * as offers from "../offers.js";
 import type * as orders from "../orders.js";
+import type * as pages from "../pages.js";
 import type * as products from "../products.js";
 import type * as push from "../push.js";
 import type * as pushDelivery from "../pushDelivery.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   maintenance: typeof maintenance;
   offers: typeof offers;
   orders: typeof orders;
+  pages: typeof pages;
   products: typeof products;
   push: typeof push;
   pushDelivery: typeof pushDelivery;

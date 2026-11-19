@@ -15,7 +15,9 @@ import { OffersPage } from "./OffersPage";
 import { SalesPage } from "./SalesPage";
 import { CustomersPage } from "./CustomersPage";
 import { AnalyticsPage } from "./AnalyticsPage";
-import { ShippingPage } from "./ShippingPage";
+import { AppearancePage } from "./AppearancePage";
+import { NavigationPage } from "./NavigationPage";
+import { PagesPage } from "./PagesPage";
 import { SettingsPage } from "./SettingsPage";
 import type { AdminCtx, ModalKey } from "./types";
 import { useScrollLock } from "../hooks/useScrollLock";
@@ -31,14 +33,17 @@ const PAGES: Record<string, ComponentType<{ ctx: AdminCtx }>> = {
   offers: OffersPage,
   sales: SalesPage,
   analytics: AnalyticsPage,
-  shipping: ShippingPage,
+  shipping: SettingsPage,
   settings: SettingsPage,
+  appearance: AppearancePage,
+  navigation: NavigationPage,
+  pages: PagesPage,
 };
 
 // Port of the vanilla admin() shell. Owns the shared modal state and the
 // selected doc ids, and hands open/close callbacks down to the pages.
 export default function AdminApp({ view }: { view: string }) {
-  const products = useQuery(api.products.list);
+  const products = useQuery(api.products.listAll);
   const orders = useQuery(api.orders.list);
   const coupons = useQuery(api.coupons.list);
   const offers = useQuery(api.offers.list);
@@ -72,7 +77,7 @@ export default function AdminApp({ view }: { view: string }) {
   useScrollLock(!!modal || mobileSidebar);
 
   useEffect(() => {
-    const names: Record<string, string> = { overview: "Overview", orders: "Orders", products: "Products", collections: "Collections", customers: "Customers", discounts: "Discounts", sales: "Sales", offers: "Offers", analytics: "Analytics", shipping: "Shipping", settings: "Settings" };
+    const names: Record<string, string> = { overview: "Overview", orders: "Orders", products: "Products", collections: "Collections", customers: "Customers", discounts: "Discounts", sales: "Sales", offers: "Banners", analytics: "Analytics", shipping: "Delivery", settings: "Settings", appearance: "Appearance", navigation: "Navigation", pages: "Pages & policies" };
     document.title = `${names[view] ?? "Dashboard"} · Dashboard`;
   }, [view]);
 
@@ -151,6 +156,7 @@ export default function AdminApp({ view }: { view: string }) {
         <Sidebar
           view={view}
           newOrders={newOrders}
+          openReturns={orders ? orders.filter((o) => o.returnRequest?.status === "Requested").length : 0}
           storeName={settings?.storeName ?? "bridetouch"}
           logoImage={settings?.logoImage}
           open={mobileSidebar}
@@ -191,6 +197,7 @@ export default function AdminApp({ view }: { view: string }) {
             String(selectedOrderId)
           }
           modal={modal}
+          onOpen={(m) => setModal(m)}
           products={ctx.products}
           orders={ctx.orders}
           offers={ctx.offers}
