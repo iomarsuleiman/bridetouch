@@ -22,6 +22,7 @@ import { StoreFooter } from "./StoreFooter";
 import { PageView } from "./PageView";
 import { TrackPage } from "./TrackPage";
 import { effectiveLinks, isExternal, linkHref } from "../lib/navLinks";
+import { applyTheme } from "../lib/theme";
 
 export type StoreRoute = {
   view: StoreView;
@@ -49,10 +50,10 @@ export default function Storefront({ route }: { route: StoreRoute }) {
   const cart = useCart();
   useScrollReveal();
 
-  // Brand accent from Appearance settings, used for sale prices and highlights.
+  // Store colors from Appearance settings.
   useEffect(() => {
-    if (settings?.accentColor) document.documentElement.style.setProperty("--accent", settings.accentColor);
-  }, [settings?.accentColor]);
+    if (settings) applyTheme(settings.brandColor, settings.accentColor);
+  }, [settings?.brandColor, settings?.accentColor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Arc-style floating header: compacts once you scroll.
   const [scrolled, setScrolled] = useState(false);
@@ -84,6 +85,25 @@ export default function Storefront({ route }: { route: StoreRoute }) {
     setCartOpen(false);
     setMobileNav(false);
   }, [route]);
+
+  // Close the phone menu on any tap outside it (more reliable on iOS than
+  // the overlay alone), or with Escape.
+  useEffect(() => {
+    if (!mobileNav) return;
+    const onPointer = (event: Event) => {
+      const header = document.querySelector(".store-header");
+      if (header && !header.contains(event.target as Node)) setMobileNav(false);
+    };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setMobileNav(false); };
+    document.addEventListener("pointerdown", onPointer, true);
+    document.addEventListener("touchstart", onPointer, { capture: true, passive: true });
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer, true);
+      document.removeEventListener("touchstart", onPointer, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [mobileNav]);
 
   // Lock the page behind the bag and the mobile menu (works on iOS too).
   useScrollLock(cartOpen || mobileNav);

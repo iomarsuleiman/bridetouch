@@ -143,6 +143,7 @@ export default defineSchema({
     address: v.optional(v.string()),
     returnDays: v.optional(v.number()),
     accentColor: v.optional(v.string()),
+    brandColor: v.optional(v.string()),
     email: v.string(),
     city: v.string(),
     shipping: v.number(),

@@ -1,4 +1,6 @@
 import { DEFAULT_LOGO } from "../components/BrandLogo";
+import { DEFAULT_ACCENT, DEFAULT_BRAND, themeVars } from "../lib/theme";
+import { Headline } from "../lib/headline";
 import { Icon } from "../components/Icon";
 import { SmartImage } from "../components/SmartImage";
 import { ImageUpload } from "./ImageUpload";
@@ -6,14 +8,34 @@ import { SaveBar, Section, TextField, useSettingsDraft } from "./forms";
 import { Heading } from "./shared";
 import type { AdminCtx } from "./types";
 
-const ACCENTS = ["#cb887a", "#b98b5e", "#8a9a6b", "#6f8fa3", "#9a7aa8", "#c7768f", "#355241"];
+const BRANDS = ["#355241", "#2f3e46", "#5b4636", "#7a4f5a", "#3d4f7c", "#6b5b95", "#1f1f1f"];
+const ACCENTS = ["#cb887a", "#c7768f", "#b98b5e", "#d4a373", "#8a9a6b", "#6f8fa3", "#9a7aa8"];
+
+function ColorPicker({ label, hint, value, options, onChange }: { label: string; hint: string; value: string; options: string[]; onChange: (v: string) => void }) {
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <div className="swatches" role="radiogroup" aria-label={label}>
+        {options.map((color) => (
+          <button key={color} type="button" role="radio" aria-checked={value.toLowerCase() === color} aria-label={color} className={"swatch" + (value.toLowerCase() === color ? " on" : "")} style={{ background: color }} onClick={() => onChange(color)} />
+        ))}
+        <label className={"swatch custom" + (!options.includes(value.toLowerCase()) ? " on" : "")} title="Custom color" style={!options.includes(value.toLowerCase()) ? { background: value } : undefined}>
+          <input type="color" value={value} onChange={(e) => onChange(e.target.value)} aria-label={`Custom ${label.toLowerCase()}`} />
+          {options.includes(value.toLowerCase()) ? <Icon name="plus" size="sm" /> : null}
+        </label>
+      </div>
+      <small className="field-hint">{hint}</small>
+    </div>
+  );
+}
 
 export function AppearancePage({ ctx }: { ctx: AdminCtx }) {
   const s = ctx.settings;
   const form = useSettingsDraft(
     () => ({
       logoImage: s.logoImage || DEFAULT_LOGO,
-      accentColor: s.accentColor || "#cb887a",
+      accentColor: s.accentColor || DEFAULT_ACCENT,
+      brandColor: s.brandColor || DEFAULT_BRAND,
       announcement: s.announcement ?? "",
       heroTitle: s.heroTitle ?? "",
       heroDescription: s.heroDescription ?? "",
@@ -38,20 +60,11 @@ export function AppearancePage({ ctx }: { ctx: AdminCtx }) {
       />
       <div className="appearance-layout">
         <div className="appearance-form">
-          <Section icon="palette" title="Brand" description="Your logo and the accent color used for sale prices, badges and highlights.">
+          <Section icon="palette" title="Brand" description="Your logo and the two colors your store is built around.">
             <ImageUpload label="Logo" value={d.logoImage} onChange={(v) => form.set("logoImage", v)} />
-            <div className="field">
-              <label>Accent color</label>
-              <div className="swatches" role="radiogroup" aria-label="Accent color">
-                {ACCENTS.map((color) => (
-                  <button key={color} type="button" role="radio" aria-checked={d.accentColor === color} aria-label={color} className={"swatch" + (d.accentColor === color ? " on" : "")} style={{ background: color }} onClick={() => form.set("accentColor", color)} />
-                ))}
-                <label className="swatch custom" title="Custom color">
-                  <input type="color" value={d.accentColor} onChange={(e) => form.set("accentColor", e.target.value)} aria-label="Custom accent color" />
-                  <Icon name="plus" size="sm" />
-                </label>
-              </div>
-            </div>
+            <ColorPicker label="Main color" hint="Buttons, the bag, the top banner and the selected menu item." value={d.brandColor} options={BRANDS} onChange={(v) => form.set("brandColor", v)} />
+            <ColorPicker label="Highlight color" hint="The italic part of your headline, sale prices and badges." value={d.accentColor} options={ACCENTS} onChange={(v) => form.set("accentColor", v)} />
+            <button type="button" className="btn ghost small" style={{ justifySelf: "start" }} onClick={() => form.patch({ brandColor: DEFAULT_BRAND, accentColor: DEFAULT_ACCENT })}>Reset to default colors</button>
             <TextField id="announcement" label="Announcement bar" maxLength={160} placeholder="Orders placed today ship Sunday" hint="A short line across the top of every page. Leave empty to hide it." value={d.announcement} onChange={(v) => form.set("announcement", v)} />
           </Section>
           <Section icon="home" title="Homepage" description="The first thing customers see.">
@@ -70,7 +83,7 @@ export function AppearancePage({ ctx }: { ctx: AdminCtx }) {
           </Section>
         </div>
         <aside className="appearance-preview" aria-label="Preview">
-          <div className="preview-frame" style={{ ["--accent" as string]: d.accentColor }}>
+          <div className="preview-frame" style={themeVars(d.brandColor, d.accentColor)}>
             <div className="preview-bar"><i /><i /><i /><span>{location.host || "your store"}</span></div>
             {d.announcement ? <div className="preview-announce">{d.announcement}</div> : null}
             <div className="preview-header">
@@ -80,7 +93,7 @@ export function AppearancePage({ ctx }: { ctx: AdminCtx }) {
             </div>
             <div className="preview-hero">
               <div>
-                <h3>{d.heroTitle || "A little something, made by hand."}</h3>
+                <h3><Headline text={d.heroTitle} /></h3>
                 <p>{d.heroDescription || "Tell customers what you make."}</p>
                 <span className="preview-cta">Explore the collection</span>
               </div>
@@ -91,7 +104,7 @@ export function AppearancePage({ ctx }: { ctx: AdminCtx }) {
                 <div key={p._id}>
                   <SmartImage src={p.img} alt="" />
                   <small>{p.name}</small>
-                  <b style={{ color: d.accentColor }}>EGP {p.price}</b>
+                  <b>EGP {p.price}</b>
                 </div>
               ))}
             </div>
@@ -103,3 +116,4 @@ export function AppearancePage({ ctx }: { ctx: AdminCtx }) {
     </>
   );
 }
+

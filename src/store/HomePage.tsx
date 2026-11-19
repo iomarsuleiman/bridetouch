@@ -5,6 +5,7 @@ import { SmartImage } from "../components/SmartImage";
 import { linkHandler } from "../hooks/useHashRoute";
 import { useJsonLd, useSeo } from "../lib/seo";
 import { useStoreUI } from "./ui";
+import { Headline } from "../lib/headline";
 import { ProductCard } from "./ProductCard";
 
 export function HomePage({ products, settings, collections }: { products: Doc<"products">[]; settings: Doc<"settings">; collections: Doc<"collections">[] }) {
@@ -62,7 +63,7 @@ export function HomePage({ products, settings, collections }: { products: Doc<"p
       <section className={"hero" + (!heroImg ? " hero-no-image" : "")}>
         <div className="hero-copy">
           <h1 className="hero-title">
-            {settings.heroTitle ?? <>A little something, <em>made by hand.</em></>}
+            <Headline text={settings.heroTitle} />
           </h1>
           <p className="hero-sub">{heroDescription}</p>
           <a className="btn primary hero-cta" href="/catalog" onClick={linkHandler("catalog", () => goToCategory("All"))}>
