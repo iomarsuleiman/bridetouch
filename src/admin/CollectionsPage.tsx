@@ -4,18 +4,29 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
-import { Heading } from "./shared";
+import { DeleteButton, Heading } from "./shared";
+import type { Id } from "../../convex/_generated/dataModel";
 import type { AdminCtx } from "./types";
 
 /** Curated collections are saved records; product categories exist independently. */
 export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
   const add = useMutation(api.collections.add);
+  const removeCollection = useMutation(api.collections.remove);
   const addCategory = useMutation(api.categories.add);
   const savedCategories = useQuery(api.categories.list) ?? [];
   const [newCategory, setNewCategory] = useState("");
   const [creating, setCreating] = useState<string | null>(null);
   const categories = [...new Set([...savedCategories.map((entry) => entry.name), ...ctx.products.map((product) => product.category.trim())].filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+  async function deleteCollection(id: Id<"collections">, name: string) {
+    try {
+      await removeCollection({ id });
+      toast(`${name} deleted`);
+    } catch (error) {
+      toast(friendlyError(error, "Could not delete collection"));
+    }
+  }
 
   async function createCategory() {
     if (!newCategory.trim() || creating) return;
@@ -72,9 +83,12 @@ export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
                     <strong>{collection.name}</strong>
                     <small>{count ? `${count} ${count === 1 ? "product" : "products"}` : "No products assigned — edit to add"} · Collection</small>
                   </span>
-                  <button className="btn icon-only ghost" onClick={() => ctx.openEditCollection(collection._id)} aria-label={"Edit " + collection.name}>
-                    <Icon name="edit" />
-                  </button>
+                  <span className="row-actions">
+                    <button className="btn icon-only ghost" onClick={() => ctx.openEditCollection(collection._id)} aria-label={"Edit " + collection.name}>
+                      <Icon name="edit" />
+                    </button>
+                    <DeleteButton label="" onDelete={() => deleteCollection(collection._id, collection.name)} />
+                  </span>
                 </div>
               </article>
             );
