@@ -5,9 +5,12 @@ import { BrandLogo } from "../components/BrandLogo";
 
 const GROUPS: { label: string; items: { view: string; label: string; icon: string }[] }[] = [
   {
-    label: "WORKSPACE",
+    label: "",
+    items: [{ view: "overview", label: "Home", icon: "home" }],
+  },
+  {
+    label: "Commerce",
     items: [
-      { view: "overview", label: "Overview", icon: "grid" },
       { view: "orders", label: "Orders", icon: "bag" },
       { view: "products", label: "Products", icon: "package" },
       { view: "collections", label: "Collections", icon: "grid2" },
@@ -15,20 +18,24 @@ const GROUPS: { label: string; items: { view: string; label: string; icon: strin
     ],
   },
   {
-    label: "GROWTH",
+    label: "Marketing",
     items: [
-      { view: "discounts", label: "Discounts", icon: "tag" },
+      { view: "discounts", label: "Discount codes", icon: "tag" },
       { view: "sales", label: "Sales", icon: "percent" },
-      { view: "offers", label: "Offers & campaigns", icon: "gift" },
-      { view: "analytics", label: "Analytics", icon: "chart" },
+      { view: "offers", label: "Banners", icon: "megaphone" },
     ],
   },
   {
-    label: "STORE",
+    label: "Storefront",
     items: [
-      { view: "shipping", label: "Shipping & delivery", icon: "truck" },
-      { view: "settings", label: "Settings", icon: "settings" },
+      { view: "appearance", label: "Appearance", icon: "palette" },
+      { view: "navigation", label: "Navigation", icon: "link" },
+      { view: "pages", label: "Pages & policies", icon: "file" },
     ],
+  },
+  {
+    label: "Insights",
+    items: [{ view: "analytics", label: "Analytics", icon: "chart" }],
   },
 ];
 
@@ -36,6 +43,7 @@ const GROUPS: { label: string; items: { view: string; label: string; icon: strin
 export function Sidebar({
   view,
   newOrders,
+  openReturns = 0,
   storeName,
   logoImage,
   open,
@@ -43,6 +51,7 @@ export function Sidebar({
 }: {
   view: string;
   newOrders: number;
+  openReturns?: number;
   storeName: string;
   logoImage?: string;
   open: boolean;
@@ -62,7 +71,7 @@ export function Sidebar({
       <div className="sidebar-nav">
         {GROUPS.map((group) => (
           <Fragment key={group.label}>
-            <div className="sidebar-group-label">{group.label}</div>
+            {group.label ? <div className="sidebar-group-label">{group.label}</div> : null}
             {group.items.map((item) => {
               const active = view === item.view;
               return (
@@ -75,6 +84,7 @@ export function Sidebar({
                   <Icon name={item.icon} />
                   <span>{item.label}</span>
                   {item.view === "orders" && newOrders > 0 ? <span className="nav-count">{newOrders}</span> : null}
+                  {item.view === "orders" && openReturns > 0 ? <span className="nav-count returns" title="Open return requests">{openReturns}</span> : null}
                 </button>
               );
             })}
@@ -82,6 +92,10 @@ export function Sidebar({
         ))}
       </div>
       <div className="sidebar-foot">
+        <button className={"nav-link" + (view === "settings" || view === "shipping" ? " active" : "")} onClick={() => navigate("admin/settings")}>
+          <Icon name="settings" />
+          <span>Settings</span>
+        </button>
         <button className="store-switch" onClick={() => navigate("shop")}>
           <span className="avatar">{(storeName.trim()[0] ?? "b").toUpperCase()}</span>
           <span style={{ flex: 1, minWidth: 0 }}>

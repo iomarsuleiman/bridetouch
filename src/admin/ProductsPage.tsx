@@ -25,22 +25,21 @@ export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
       toast(friendlyError(error, "Could not delete product"));
     }
   }
-  const tabs = ["All", "In stock", "Low stock", "Sold out"];
+  const tabs = ["All", "Active", "Drafts", "Low stock", "Sold out", "Archived"];
   const q = query.trim().toLowerCase();
+  const statusOf = (p: { status?: string }) => p.status ?? "active";
+  const matches = (p: (typeof ctx.products)[number], t: string) =>
+    t === "All" ? statusOf(p) !== "archived"
+      : t === "Active" ? statusOf(p) === "active"
+        : t === "Drafts" ? statusOf(p) === "draft"
+          : t === "Archived" ? statusOf(p) === "archived"
+            : t === "Low stock" ? statusOf(p) === "active" && p.stock > 0 && p.stock <= 5
+              : statusOf(p) === "active" && p.stock <= 0;
   const items = ctx.products.filter(
-    (p) =>
-      (tab === "All" ||
-        (tab === "In stock" && p.stock > 0) ||
-        (tab === "Low stock" && p.stock > 0 && p.stock <= 5) ||
-        (tab === "Sold out" && p.stock <= 0)) &&
-      (!q || (p.name + " " + p.category + " BT-" + String(p.number).padStart(3, "0")).toLowerCase().includes(q)),
+    (p) => matches(p, tab) && (!q || (p.name + " " + p.category + " " + (p.sku ?? "") + " BT-" + String(p.number).padStart(3, "0")).toLowerCase().includes(q)),
   );
-  const counts: Record<string, number> = {
-    All: ctx.products.length,
-    "In stock": ctx.products.filter((p) => p.stock > 0).length,
-    "Low stock": ctx.products.filter((p) => p.stock > 0 && p.stock <= 5).length,
-    "Sold out": ctx.products.filter((p) => p.stock <= 0).length,
-  };
+  const counts: Record<string, number> = Object.fromEntries(tabs.map((t) => [t, ctx.products.filter((p) => matches(p, t)).length]));
+
 
   return (
     <>
@@ -111,7 +110,7 @@ export function ProductsPage({ ctx }: { ctx: AdminCtx }) {
                     </div>
                   </td>
                   <td>
-                    <Badge text={p.stock > 0 ? "Active" : "Sold out"} />
+                    <Badge text={statusOf(p) === "draft" ? "Draft" : statusOf(p) === "archived" ? "Archived" : p.stock > 0 ? "Active" : "Sold out"} />
                   </td>
                   <td>
                     {p.stock} available {p.stock > 0 && p.stock <= 5 ? <span className="badge amber">Low</span> : null}

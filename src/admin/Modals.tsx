@@ -8,6 +8,7 @@ import { Badge } from "../components/Badge";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
 import { ImageUpload } from "./ImageUpload";
+import { SmartImage } from "../components/SmartImage";
 import { money, formatOrderDate } from "../lib/format";
 import { navigate } from "../hooks/useHashRoute";
 import { isTouch } from "../hooks/useScrollLock";
@@ -29,6 +30,7 @@ type ModalsProps = {
   selectedOrderId: Id<"orders"> | null;
   onClose: () => void;
   onOpenOrder: (id: Id<"orders">) => void;
+  onOpen?: (modal: ModalKey) => void;
 };
 
 // Shared chrome, ported from the vanilla modal() wrapper.
@@ -147,6 +149,28 @@ function OptionValueInput({ onAdd }: { onAdd: (value: string) => void }) {
   );
 }
 
+/** Upload or paste a photo, then confirm. Pasted links aren't added on every keystroke. */
+function GalleryAdd({ onAdd }: { onAdd: (url: string) => void }) {
+  const [url, setUrl] = useState("");
+  const [key, setKey] = useState(0);
+  const add = (value: string) => {
+    if (!/^(https:\/\/|\/)/i.test(value.trim())) return;
+    onAdd(value.trim());
+    setUrl("");
+    setKey((k) => k + 1);
+  };
+  return (
+    <div className="gallery-add">
+      <ImageUpload key={key} label="Add a photo" value={url} onChange={(next) => {
+        // Uploads return a full https URL in one go: add those immediately.
+        if (/^https:\/\/.+\.[a-z]{2,}\/.+/i.test(next) && next.length - url.length > 8) add(next);
+        else setUrl(next);
+      }} />
+      {url.trim() ? <button type="button" className="btn small secondary" onClick={() => add(url)}><Icon name="plus" size="sm" /> Add photo</button> : null}
+    </div>
+  );
+}
+
 function ProductModal({ product, onClose }: {
   product: Doc<"products"> | null;
   onClose: () => void;
@@ -168,6 +192,10 @@ function ProductModal({ product, onClose }: {
   const [newCategory, setNewCategory] = useState("");
   const [addingCategory, setAddingCategory] = useState(false);
   const [img, setImg] = useState(product?.img ?? "");
+  const [gallery, setGallery] = useState<string[]>(product?.images ?? []);
+  const [status, setStatus] = useState(product?.status ?? "active");
+  const [sku, setSku] = useState(product?.sku ?? "");
+  const [compareAt, setCompareAt] = useState(product?.compareAtPrice ? String(product.compareAtPrice) : "");
   const [description, setDescription] = useState(product?.description ?? "");
   const [options, setOptions] = useState<OptionDraft[]>(() => product?.options?.map((option) => ({
     name: option.name, values: [...option.values],
@@ -176,7 +204,7 @@ function ProductModal({ product, onClose }: {
     values: [...variant.values], stock: variant.stock, price: variant.price,
   })) ?? []);
 
-  const allProducts = useQuery(api.products.list) ?? [];
+  const allProducts = useQuery(api.products.listAll) ?? [];
   // Categories already used by products count too (older products predate the categories list).
   const categoryChoices = [...new Set([
     ...categories.map((entry) => entry.name),
@@ -248,6 +276,10 @@ function ProductModal({ product, onClose }: {
         description: description.trim() || undefined,
         options: options.length ? normalized : undefined,
         variants: options.length ? rows : undefined,
+        status,
+        images: gallery.filter(Boolean),
+        sku: sku.trim() || undefined,
+        compareAtPrice: compareAt.trim() ? Number(compareAt) : undefined,
       };
       if (product) await update({ id: product._id, ...payload });
       else await add(payload);
@@ -287,6 +319,22 @@ function ProductModal({ product, onClose }: {
     <ModalShell title={editing ? "Edit product" : "Add product"} large onClose={onClose} footer={confirmDelete ? deleteControls : footer(save, deleteControls, editing ? "Save" : "Add product")}>
       {form(
         <>
+          <div className="field">
+            <label>Status</label>
+            <div className="status-choice" role="radiogroup" aria-label="Product status">
+              {[
+                { id: "active", label: "Active", hint: "For sale in your store", icon: "check" },
+                { id: "draft", label: "Draft", hint: "Hidden while you work on it", icon: "edit" },
+                { id: "archived", label: "Archived", hint: "Retired, kept for history", icon: "archive" },
+              ].map((option) => (
+                <button key={option.id} type="button" role="radio" aria-checked={status === option.id} className={"status-option" + (status === option.id ? " on" : "")} onClick={() => setStatus(option.id)}>
+                  <Icon name={option.icon} size="sm" />
+                  <strong>{option.label}</strong>
+                  <small>{option.hint}</small>
+                </button>
+              ))}
+            </div>
+          </div>
           <Field label="Product name" name="name" value={name} onChange={setName} autoFocus maxLength={120} placeholder="e.g. Pearl bridal hair pin" />
           <div className="grid-2">
             <Field label="Base price (EGP)" name="price" type="number" step="any" min={0} value={price} onChange={setPrice} placeholder="0" />
@@ -316,7 +364,28 @@ function ProductModal({ product, onClose }: {
                 onClick={() => void createCategory()}>Create category</button>
             </div>
           </div>
-          <ImageUpload label="Product photo" value={img} onChange={setImg} />
+          <div className="grid-2">
+            <Field label="Compare-at price (EGP)" name="compareAt" type="number" step="any" required={false} value={compareAt} onChange={setCompareAt} placeholder="Original price" hint="Shown crossed out next to the price, e.g. 450 → 380." />
+            <Field label="SKU" name="sku" required={false} value={sku} onChange={setSku} maxLength={40} placeholder="BT-VEIL-01" hint="Your own reference code." />
+          </div>
+          <ImageUpload label="Cover photo" value={img} onChange={setImg} />
+          <div className="field">
+            <label>More photos <span className="muted">({gallery.length}/12)</span></label>
+            {gallery.length ? (
+              <div className="gallery-editor">
+                {gallery.map((url, index) => (
+                  <div key={index} className="gallery-thumb">
+                    <SmartImage src={url} alt="" />
+                    <div className="gallery-thumb-actions">
+                      <button type="button" aria-label="Make cover photo" title="Make cover" onClick={() => { setGallery((g) => g.map((x, i) => (i === index ? img : x)).filter(Boolean)); setImg(url); }}><Icon name="star" size="sm" /></button>
+                      <button type="button" aria-label="Remove photo" title="Remove" onClick={() => setGallery((g) => g.filter((_, i) => i !== index))}><Icon name="close" size="sm" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {gallery.length < 12 ? <GalleryAdd onAdd={(url) => setGallery((g) => [...g, url])} /> : null}
+          </div>
           <div className="field">
             <label htmlFor="f-description">Description</label>
             <textarea id="f-description" name="description" value={description} maxLength={2000}
@@ -451,11 +520,11 @@ function OfferModal({
   }
 
   return (
-    <ModalShell title={editing ? "Edit offer" : "Create offer"} onClose={onClose} footer={footer(save)}>
+    <ModalShell title={editing ? "Edit banner" : "New banner"} onClose={onClose} footer={footer(save)}>
       {form(
         <>
-          <Field label="Offer name" name="name" value={name} onChange={setName} autoFocus maxLength={80} placeholder="Free gift wrapping" hint="Shown in the banner at the top of your shop while the offer is active." />
-          <Field label="Offer type" name="kind" value={kind} onChange={setKind} maxLength={40} placeholder="Campaign" />
+          <Field label="Banner message" name="name" value={name} onChange={setName} autoFocus maxLength={80} placeholder="Free gift wrapping" hint="Shown in the banner at the top of your shop while the offer is active." />
+          <Field label="Label" name="kind" value={kind} onChange={setKind} maxLength={40} placeholder="Campaign" />
           <Field label="Details" name="details" value={details} onChange={setDetails} maxLength={120} placeholder="On all orders this week" />
         </>,
       )}
@@ -466,7 +535,7 @@ function OfferModal({
 function SaleModal({ onClose }: { onClose: () => void }) {
   const toast = useToast();
   const add = useMutation(api.sales.add);
-  const products = useQuery(api.products.list) ?? [];
+  const products = useQuery(api.products.listAll) ?? [];
   const collections = useQuery(api.collections.list) ?? [];
   const { run, form, footer } = useFormModal(onClose, toast);
   const toLocal = (ms: number) =>
@@ -570,7 +639,7 @@ function CollectionModal({
   const { run, form, footer } = useFormModal(onClose, toast);
   const [name, setName] = useState(collection?.name ?? "");
   const [image, setImage] = useState(collection?.image ?? defaultImage);
-  const products = useQuery(api.products.list) ?? [];
+  const products = useQuery(api.products.listAll) ?? [];
   const [productNumbers, setProductNumbers] = useState(collection?.productNumbers ?? []);
 
   function save() {
@@ -696,6 +765,12 @@ function OrderDetailModal({
 }) {
   const toast = useToast();
   const updateStatus = useMutation(api.orders.updateStatus);
+  const setTracking = useMutation(api.orders.setTracking);
+  const updateReturn = useMutation(api.orders.updateReturn);
+  const [carrier, setCarrier] = useState(order.tracking?.carrier ?? "");
+  const [trackingNumber, setTrackingNumber] = useState(order.tracking?.number ?? "");
+  const [trackingUrl, setTrackingUrl] = useState(order.tracking?.url ?? "");
+  const trackingDirty = carrier !== (order.tracking?.carrier ?? "") || trackingNumber !== (order.tracking?.number ?? "") || trackingUrl !== (order.tracking?.url ?? "");
   const statuses = ["New", "Confirmed", "Making", "Packed", "Shipped", "Delivered", "Cancelled"];
   const payments = ["Unpaid", "Collected", "Settled"];
   const [pending, setPending] = useState<string | null>(null);
@@ -746,7 +821,19 @@ function OrderDetailModal({
 
   const subtotal = order.subtotal ?? order.items.reduce((sum, i) => sum + (i.price ?? products.find((p) => p.number === i.number)?.price ?? 0) * i.qty, 0);
   const intlPhone = "20" + order.phone.replace(/\D/g, "").replace(/^0+/, "").replace(/^20/, "");
-  const whatsapp = `https://wa.me/${intlPhone}?text=${encodeURIComponent(`Hi ${order.customer.split(" ")[0]}, about your order #BT-${order.number}`)}`;
+  // Ready-to-send confirmation message: items, total, and the tracking page.
+  const confirmText = [
+    `Hi ${order.customer.split(" ")[0]}! Thank you for your order #BT-${order.number} 🤍`,
+    "",
+    ...order.items.map((i) => `• ${i.name ?? "Item"}${i.variant ? ` (${i.variant})` : ""} × ${i.qty}`),
+    "",
+    `Total: ${money(order.total)}, cash on delivery`,
+    `Delivery to: ${order.address}`,
+    "",
+    "Could you confirm this is correct?",
+    `Track your order anytime: ${location.origin}/track?order=${order.number}`,
+  ].join("\n");
+  const whatsapp = `https://wa.me/${intlPhone}?text=${encodeURIComponent(confirmText)}`;
 
   return (
     <ModalShell
@@ -808,11 +895,12 @@ function OrderDetailModal({
             <br />
             <a href={`tel:+${intlPhone}`} className="text-link">0{intlPhone.slice(2)}</a>
             <br />
-            {order.city}
+            {order.zone && order.zone !== order.city ? `${order.city} · ${order.zone}` : order.city}
+            {order.email ? <><br /><a className="text-link" href={`mailto:${order.email}`}>{order.email}</a></> : null}
           </div>
           <div className="contact-actions">
             <a className="btn secondary small" href={`tel:+${intlPhone}`}><Icon name="phone" size="sm" /> Call</a>
-            <a className="btn secondary small" href={whatsapp} target="_blank" rel="noopener noreferrer"><Icon name="mail" size="sm" /> WhatsApp</a>
+            <a className="btn secondary small" href={whatsapp} target="_blank" rel="noopener noreferrer"><Icon name="mail" size="sm" /> Send confirmation on WhatsApp</a>
           </div>
         </div>
         <div className="detail-section">
@@ -822,6 +910,35 @@ function OrderDetailModal({
             <button className="btn secondary small" type="button" onClick={() => copyText(order.address, toast)}><Icon name="copy" size="sm" /> Copy address</button>
           </div>
         </div>
+      </div>
+      {order.returnRequest ? (
+        <div className="detail-section return-section">
+          <h3>Return request <Badge text={order.returnRequest.status} /></h3>
+          <p className="return-reason">“{order.returnRequest.reason}”</p>
+          <small className="muted">Requested {new Date(order.returnRequest.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</small>
+          <div className="status-track" style={{ marginTop: 10 }}>
+            {["Requested", "Approved", "Rejected", "Refunded"].map((st) => (
+              <button key={st} type="button" aria-pressed={order.returnRequest!.status === st} className={order.returnRequest!.status === st ? "current" : ""}
+                onClick={async () => { try { await updateReturn({ id: order._id, status: st }); toast(`Return marked ${st.toLowerCase()}`); } catch (e) { toast(friendlyError(e, "Could not update the return")); } }}>
+                {st}
+              </button>
+            ))}
+          </div>
+          <p className="form-help">Approved: arrange the pickup. Refunded: the customer has their money back. Restock items yourself if they're resellable.</p>
+        </div>
+      ) : null}
+      <div className="detail-section">
+        <h3>Tracking</h3>
+        <div className="grid-3">
+          <input aria-label="Courier" placeholder="Courier (e.g. Bosta)" value={carrier} maxLength={60} onChange={(e) => setCarrier(e.target.value)} />
+          <input aria-label="Tracking number" placeholder="Tracking number" value={trackingNumber} maxLength={80} autoCapitalize="characters" autoCorrect="off" onChange={(e) => setTrackingNumber(e.target.value)} />
+          <input aria-label="Tracking link" placeholder="https://… (optional)" inputMode="url" autoCapitalize="none" autoCorrect="off" value={trackingUrl} onChange={(e) => setTrackingUrl(e.target.value)} />
+        </div>
+        {trackingDirty ? (
+          <button type="button" className="btn secondary small" style={{ marginTop: 8 }} onClick={async () => {
+            try { await setTracking({ id: order._id, carrier, number: trackingNumber, url: trackingUrl.trim() || undefined }); toast("Tracking saved"); } catch (e) { toast(friendlyError(e, "Could not save tracking")); }
+          }}><Icon name="check" size="sm" /> Save tracking</button>
+        ) : <p className="form-help">Customers see this on their order tracking page.</p>}
       </div>
       <div className="detail-section">
         <h3>Order status</h3>
@@ -900,68 +1017,82 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-const COMMAND_PAGES = [
-  "overview",
-  "orders",
-  "products",
-  "collections",
-  "customers",
-  "discounts",
-  "sales",
-  "offers",
-  "analytics",
-  "shipping",
-  "settings",
+const COMMANDS: { id: string; label: string; icon: string; group: string; keywords?: string; run: (open: (m: ModalKey) => void) => void }[] = [
+  { id: "overview", label: "Home", icon: "home", group: "Go to", keywords: "overview dashboard", run: () => navigate("admin/overview") },
+  { id: "orders", label: "Orders", icon: "bag", group: "Go to", keywords: "returns", run: () => navigate("admin/orders") },
+  { id: "products", label: "Products", icon: "package", group: "Go to", keywords: "inventory stock", run: () => navigate("admin/products") },
+  { id: "collections", label: "Collections", icon: "grid2", group: "Go to", run: () => navigate("admin/collections") },
+  { id: "customers", label: "Customers", icon: "users", group: "Go to", run: () => navigate("admin/customers") },
+  { id: "discounts", label: "Discount codes", icon: "tag", group: "Go to", keywords: "coupons", run: () => navigate("admin/discounts") },
+  { id: "sales", label: "Sales", icon: "percent", group: "Go to", run: () => navigate("admin/sales") },
+  { id: "offers", label: "Banners", icon: "megaphone", group: "Go to", keywords: "offers campaigns", run: () => navigate("admin/offers") },
+  { id: "appearance", label: "Appearance", icon: "palette", group: "Go to", keywords: "logo homepage colors theme", run: () => navigate("admin/appearance") },
+  { id: "navigation", label: "Navigation", icon: "link", group: "Go to", keywords: "menu header links", run: () => navigate("admin/navigation") },
+  { id: "pages", label: "Pages & policies", icon: "file", group: "Go to", keywords: "about faq privacy terms returns", run: () => navigate("admin/pages") },
+  { id: "analytics", label: "Analytics", icon: "chart", group: "Go to", keywords: "reports", run: () => navigate("admin/analytics") },
+  { id: "settings", label: "Settings", icon: "settings", group: "Go to", keywords: "store details", run: () => navigate("admin/settings") },
+  { id: "delivery", label: "Delivery & returns", icon: "truck", group: "Go to", keywords: "shipping zones fees", run: () => navigate("admin/settings?tab=delivery") },
+  { id: "team", label: "Team", icon: "users", group: "Go to", keywords: "admins administrators", run: () => navigate("admin/settings?tab=team") },
+  { id: "new-product", label: "Add a product", icon: "plus", group: "Create", run: (open) => open("add-product") },
+  { id: "new-order", label: "Record a manual order", icon: "receipt", group: "Create", run: (open) => open("new-order") },
+  { id: "new-discount", label: "Create a discount code", icon: "tag", group: "Create", run: (open) => open("add-discount") },
+  { id: "new-sale", label: "Schedule a sale", icon: "percent", group: "Create", run: (open) => open("add-sale") },
+  { id: "view-store", label: "View your store", icon: "external", group: "Store", run: () => window.open("/", "_blank") },
 ];
 
-function CommandModal({ onClose }: { onClose: () => void }) {
+function CommandModal({ onClose, onOpen }: { onClose: () => void; onOpen: (m: ModalKey) => void }) {
   const [query, setQuery] = useState("");
-  const matches = COMMAND_PAGES.filter((x) => x.includes(query.toLowerCase()));
+  const [index, setIndex] = useState(0);
+  const q = query.trim().toLowerCase();
+  const matches = COMMANDS.filter((c) => !q || (c.label + " " + (c.keywords ?? "") + " " + c.id).toLowerCase().includes(q));
+  useEffect(() => setIndex(0), [query]);
+  const run = (c: (typeof COMMANDS)[number]) => {
+    onClose();
+    // Let this palette close before another dialog opens.
+    window.setTimeout(() => c.run(onOpen), 0);
+  };
+  let lastGroup = "";
   return (
-    <ModalShell
-      title="Jump to a page"
-      onClose={onClose}
-      footer={
-        <button className="btn secondary" onClick={onClose}>
-          Close
-        </button>
-      }
-    >
-      <div className="search" style={{ width: "100%" }}>
-        <Icon name="search" />
-        <input
-          autoFocus={!isTouch()}
-          aria-label="Search pages"
-          placeholder="Search dashboard pages…"
-          value={query}
-          enterKeyHint="go"
-          autoComplete="off"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && matches[0]) {
-              navigate("admin/" + matches[0]);
-              onClose();
-            }
-          }}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      </div>
-      <div style={{ display: "grid", gap: 3 }}>
-        {matches.map((x) => (
-          <button
-            key={x}
-            style={{ textAlign: "left", padding: 11, borderRadius: 8 }}
-            className="nav-link"
-            onClick={() => {
-              navigate("admin/" + x);
-              onClose();
+    <div className="palette-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="palette" role="dialog" aria-modal="true" aria-label="Command menu">
+        <div className="palette-search">
+          <Icon name="search" size="sm" />
+          <input
+            autoFocus={!isTouch()}
+            aria-label="Search commands"
+            aria-activedescendant={matches[index] ? "cmd-" + matches[index].id : undefined}
+            placeholder="Jump to a page or do something…"
+            value={query}
+            enterKeyHint="go"
+            autoComplete="off"
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") { e.preventDefault(); setIndex((i) => Math.min(matches.length - 1, i + 1)); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); setIndex((i) => Math.max(0, i - 1)); }
+              else if (e.key === "Enter" && matches[index]) { e.preventDefault(); run(matches[index]); }
             }}
-          >
-            <Icon name="right" size="sm" />
-            {x.charAt(0).toUpperCase() + x.slice(1)}
-          </button>
-        ))}
+          />
+          <kbd>esc</kbd>
+        </div>
+        <ul className="palette-list" role="listbox">
+          {matches.map((c, i) => {
+            const header = c.group !== lastGroup ? c.group : null;
+            lastGroup = c.group;
+            return (
+              <li key={c.id} role="presentation">
+                {header ? <div className="palette-group">{header}</div> : null}
+                <button id={"cmd-" + c.id} type="button" role="option" aria-selected={i === index} className={"palette-item" + (i === index ? " active" : "")} onMouseEnter={() => setIndex(i)} onClick={() => run(c)}>
+                  <span className="palette-icon"><Icon name={c.icon} size="sm" /></span>
+                  <span>{c.label}</span>
+                  {i === index ? <Icon name="arrow" size="sm" /> : null}
+                </button>
+              </li>
+            );
+          })}
+          {!matches.length ? <li className="palette-empty">No matches for “{query}”</li> : null}
+        </ul>
       </div>
-    </ModalShell>
+    </div>
   );
 }
 
@@ -1049,7 +1180,7 @@ export function Modals(props: ModalsProps) {
     case "shortcuts":
       return <ShortcutsModal onClose={props.onClose} />;
     case "command":
-      return <CommandModal onClose={props.onClose} />;
+      return <CommandModal onClose={props.onClose} onOpen={props.onOpen ?? (() => undefined)} />;
     case "notifications":
       return (
         <NotificationsModal

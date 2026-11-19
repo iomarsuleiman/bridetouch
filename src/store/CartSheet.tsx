@@ -54,7 +54,10 @@ export function CartSheet({
     return product ? [{ number: item.number, subtotal: priceForVariant(product, item.variant) * item.qty }] : [];
   });
   const subtotal = lines.reduce((sum, line) => sum + line.subtotal, 0);
-  const shipping = shippingTotal(subtotal, settings);
+  // With delivery areas, the fee depends on the area chosen at checkout.
+  const zoneFees = (settings.zones ?? []).filter((z) => z.enabled).map((z) => z.fee);
+  const byArea = zoneFees.length > 0 && shippingTotal(subtotal, settings) > 0;
+  const shipping = byArea ? 0 : shippingTotal(subtotal, settings);
   const discount = checkoutDiscount(lines, appliedCoupon, sales, collections, Date.now());
   const total = Math.max(0, subtotal + shipping - discount);
 
@@ -206,7 +209,7 @@ export function CartSheet({
             </div>
             <div className="sumline">
               <span>Delivery</span>
-              <strong>{shipping ? money(shipping) : "Free"}</strong>
+              <strong>{byArea ? <span className="muted">From {money(Math.min(...zoneFees))} at checkout</span> : shipping ? money(shipping) : "Free"}</strong>
             </div>
             {discount ? (
               <div className="sumline">
@@ -215,7 +218,7 @@ export function CartSheet({
               </div>
             ) : null}
             <div className="sumline total">
-              <span>Due on delivery</span>
+              <span>{byArea ? "Subtotal after discounts" : "Due on delivery"}</span>
               <strong>{money(total)}</strong>
             </div>
             <button

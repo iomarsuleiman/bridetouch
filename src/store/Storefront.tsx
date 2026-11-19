@@ -19,10 +19,14 @@ import { CheckoutPage } from "./CheckoutPage";
 import { ConfirmationPage } from "./ConfirmationPage";
 import { CartSheet } from "./CartSheet";
 import { StoreFooter } from "./StoreFooter";
+import { PageView } from "./PageView";
+import { TrackPage } from "./TrackPage";
+import { effectiveLinks, isExternal, linkHref } from "../lib/navLinks";
 
 export type StoreRoute = {
   view: StoreView;
   productId?: number;
+  slug?: string;
 };
 
 // The confirmation page survives a refresh for the rest of the browser session.
@@ -41,8 +45,23 @@ export default function Storefront({ route }: { route: StoreRoute }) {
   const products = useQuery(api.products.list);
   const collections = useQuery(api.collections.list) ?? [];
   const settings = useQuery(api.settings.get);
+  const categoryList = useQuery(api.categories.list) ?? [];
   const cart = useCart();
   useScrollReveal();
+
+  // Brand accent from Appearance settings, used for sale prices and highlights.
+  useEffect(() => {
+    if (settings?.accentColor) document.documentElement.style.setProperty("--accent", settings.accentColor);
+  }, [settings?.accentColor]);
+
+  // Arc-style floating header: compacts once you scroll.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const [cartOpen, setCartOpen] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
@@ -128,11 +147,27 @@ export default function Storefront({ route }: { route: StoreRoute }) {
     navigate("confirmation");
   };
 
+  const categoryNames = [...new Set([...categoryList.map((c) => c.name), ...(products ?? []).map((p) => p.category)])];
+  const menuLinks = effectiveLinks(settings, categoryNames, collections.map((c) => c.name)).filter((l) => !l.hidden);
+  function isActiveLink(link: { type: string; target?: string }) {
+    if (link.type === "home") return route.view === "shop";
+    if (link.type === "catalog") return route.view === "catalog" && storeCategory === "All";
+    if (link.type === "category" || link.type === "collection") return route.view === "catalog" && storeCategory === link.target;
+    if (link.type === "product") return route.view === "product" && String(route.productId) === link.target;
+    if (link.type === "page") return route.view === "page" && route.slug === link.target;
+    if (link.type === "track") return route.view === "track";
+    return false;
+  }
+
   let page: ReactNode;
   if (!products || !settings) {
     page = <StoreSkeleton view={route.view} />;
   } else if (route.view === "notfound") {
     page = <NotFoundPage products={products} storeName={settings.storeName} />;
+  } else if (route.view === "page" && route.slug) {
+    page = <PageView slug={route.slug} products={products} storeName={settings.storeName} />;
+  } else if (route.view === "track") {
+    page = <TrackPage settings={settings} />;
   } else if (route.view === "catalog") {
     page = <CatalogPage products={products} category={storeCategory} collections={collections} settings={settings} />;
   } else if (route.view === "product") {
@@ -170,7 +205,7 @@ export default function Storefront({ route }: { route: StoreRoute }) {
           <a className="skip-link" href="#main">Skip to content</a>
           <PromoBanner />
           {settings?.announcement ? <div className="store-announcement">{settings.announcement}</div> : null}
-          <header className={"store-header" + (mobileNav ? " menu-open" : "")}>
+          <header className={"store-header" + (mobileNav ? " menu-open" : "") + (scrolled ? " scrolled" : "")}>
               <button
                 type="button"
                 className="btn icon-only ghost store-mobile-menu"
@@ -190,24 +225,27 @@ export default function Storefront({ route }: { route: StoreRoute }) {
               aria-label="Store navigation"
               className={"store-nav" + (mobileNav ? " open" : "")}
             >
-              <a href="/" onClick={linkHandler("shop", goHome)} className={route.view === "shop" ? "active" : ""} aria-current={route.view === "shop" ? "page" : undefined}>
-                Home
-              </a>
-              <a
-                href="/catalog"
-                onClick={linkHandler("catalog", () => goToCategory("All"))}
-                className={route.view === "catalog" && storeCategory === "All" ? "active" : ""}
-                aria-current={route.view === "catalog" && storeCategory === "All" ? "page" : undefined}
-              >
-                Shop all
-              </a>
-              {(settings?.navigation ?? [...new Set((products ?? []).map(product => product.category))].slice(0,2))
-                // A category literally named "Home" or "Shop all" would show up twice next to the fixed links.
-                .filter((name) => !["home", "shop all"].includes(name.trim().toLowerCase()))
-                .map(name => {
-                const href = "/catalog?category=" + encodeURIComponent(name);
-                const active = route.view === "catalog" && storeCategory === name;
-                return <a key={name} href={href} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={linkHandler(href, () => goToCategory(name))}>{name}</a>;
+              {menuLinks.map((link, i) => {
+                const href = linkHref(link);
+                const external = isExternal(link);
+                const active = !external && isActiveLink(link);
+                return (
+                  <a
+                    key={i}
+                    href={href}
+                    className={active ? "active" : ""}
+                    aria-current={active ? "page" : undefined}
+                    {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {
+                      onClick: linkHandler(href.replace(/^\//, "") || "shop", () => {
+                        if (link.type === "home") goHome();
+                        else if (link.type === "catalog") goToCategory("All");
+                        else if (link.type === "category" || link.type === "collection") goToCategory(link.target ?? "All");
+                      }),
+                    })}
+                  >
+                    {link.label}
+                  </a>
+                );
               })}
               {settings?.supportUrl ? <a href={settings.supportUrl}>Support</a> : null}
               {socialLinks.length ? (
@@ -256,7 +294,7 @@ export default function Storefront({ route }: { route: StoreRoute }) {
             </div>
           </header>
           {mobileNav ? <button className="store-menu-scrim" type="button" onClick={() => setMobileNav(false)} aria-label="Close navigation menu" /> : null}
-          <main id="main" className="page-animate" key={route.view + (route.productId ?? "") + storeCategory} tabIndex={-1}>
+          <main id="main" className="page-animate" key={route.view + (route.productId ?? "") + (route.slug ?? "") + storeCategory} tabIndex={-1}>
             {page}
           </main>
           {route.view !== "confirmation" || !lastOrder ? <StoreFooter settings={settings} /> : null}

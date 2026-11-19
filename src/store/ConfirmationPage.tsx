@@ -3,6 +3,7 @@ import type { Doc } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { Icon } from "../components/Icon";
 import { useStoreUI } from "./ui";
+import { linkHandler } from "../hooks/useHashRoute";
 import { ReceiptPrinter } from "./ReceiptPrinter";
 import { useSeo } from "../lib/seo";
 
@@ -28,9 +29,18 @@ export function ConfirmationPage({
 
   return (
     <ReceiptPrinter order={order} settings={settings} products={products}>
-      <button className="btn primary" onClick={() => goToCategory("All")}>
-        Keep shopping <Icon name="arrow" size="sm" />
-      </button>
+      <div className="confirm-actions">
+        <a className="btn secondary" href={`/track?order=${order.number}`} onClick={(e) => {
+          // Pre-fill the tracking form with this order.
+          try { sessionStorage.setItem("bridetouch-track", JSON.stringify({ number: String(order.number), phone: order.phone })); } catch { /* ignore */ }
+          linkHandler(`track?order=${order.number}`)(e);
+        }}>
+          <Icon name="truck" size="sm" /> Track this order
+        </a>
+        <button className="btn primary" onClick={() => goToCategory("All")}>
+          Keep shopping <Icon name="arrow" size="sm" />
+        </button>
+      </div>
     </ReceiptPrinter>
   );
 }

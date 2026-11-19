@@ -1,437 +1,295 @@
-import { friendlyError } from "../lib/format";
-import { NotificationSetup } from "../components/NotificationSetup";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useUser } from "@clerk/react";
 import { api } from "../../convex/_generated/api";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
-import { DEFAULT_LOGO } from "../components/BrandLogo";
-import { ImageUpload } from "./ImageUpload";
+import { NotificationSetup } from "../components/NotificationSetup";
+import { friendlyError, money } from "../lib/format";
 import { Heading } from "./shared";
+import { SaveBar, Section, TextField, Toggle, useSettingsDraft, withScheme } from "./forms";
 import type { AdminCtx } from "./types";
 
-const TOGGLES: { key: "freeShipping" | "notifications" | "guestCheckout"; title: (min?: number) => string; desc: string }[] = [
-  { key: "freeShipping", title: (min) => `Free delivery from EGP ${min ?? 800}`, desc: "Apply to eligible checkout totals" },
-  { key: "notifications", title: () => "New order alerts", desc: "Show notifications in dashboard" },
-  { key: "guestCheckout", title: () => "Guest checkout", desc: "Customers do not need an account" },
-];
-
-const SOCIAL_NETWORKS = [
-  { network: "instagram", label: "Instagram", placeholder: "https://www.instagram.com/your-page" },
-  { network: "facebook", label: "Facebook", placeholder: "https://www.facebook.com/your-page" },
-  { network: "tiktok", label: "TikTok", placeholder: "https://www.tiktok.com/@your-page" },
+const TABS = [
+  { id: "general", label: "Store details", icon: "shop", hint: "Name, contact, social" },
+  { id: "delivery", label: "Delivery & returns", icon: "truck", hint: "Areas, fees, returns" },
+  { id: "checkout", label: "Checkout", icon: "card", hint: "Guest checkout, alerts" },
+  { id: "team", label: "Team", icon: "users", hint: "Who can use the dashboard" },
 ] as const;
+type Tab = (typeof TABS)[number]["id"];
 
-type SocialLink = { network: string; url: string; enabled: boolean };
-
-// Port of the vanilla settingsPage() (without the reset-demo button).
 export function SettingsPage({ ctx }: { ctx: AdminCtx }) {
-  const toast = useToast();
-  const update = useMutation(api.settings.update);
-  const s = ctx.settings;
-  const [storeName, setStoreName] = useState(s.storeName);
-  const [email, setEmail] = useState(s.email);
-  const [supportUrl, setSupportUrl] = useState(s.supportUrl ?? "");
-  const [socials, setSocials] = useState<SocialLink[]>(() => {
-    const existing = s.socials ?? [];
-    return SOCIAL_NETWORKS.map(({ network }) => {
-      const found = existing.find((entry) => entry.network === network);
-      if (found) return { ...found };
-      const legacy = network === "instagram" ? (s.instagramUrl ?? "") : "";
-      return { network, url: legacy, enabled: Boolean(legacy) };
-    });
-  });
-  const authorizedAdmins = useQuery(api.access.roster);
-  const [adminEmails, setAdminEmails] = useState<string[]>(s.adminEmails ?? []);
-  // During a one-time owner migration the effective roster comes from Convex env
-  // until an authorized admin saves it in the store's settings.
-  useEffect(() => {
-    if (authorizedAdmins) setAdminEmails(authorizedAdmins);
-  }, [authorizedAdmins]);
-  const [newAdmin, setNewAdmin] = useState("");
-  const [savingAdmins, setSavingAdmins] = useState(false);
-  const { user } = useUser();
-  const myEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
-  const [city, setCity] = useState(s.city);
-  const [shippingFee, setShippingFee] = useState(String(s.shipping ?? 65));
-  const [freeShippingMin, setFreeShippingMin] = useState(String(s.freeShippingMin ?? 800));
-  const [content, setContent] = useState({logoImage:s.logoImage || DEFAULT_LOGO,heroTitle:s.heroTitle ?? "A little something, made by hand.",heroDescription:s.heroDescription ?? "Ceramics, little keepsakes and everyday favorites. Each piece has its own kind of charm.",heroImage:s.heroImage ?? "",storyTitle:s.storyTitle ?? "Good things take a little time.",storyDescription:s.storyDescription ?? "Thoughtfully made pieces for the quiet, colorful moments in everyday life.",storyImage:s.storyImage ?? "",catalogTitle:s.catalogTitle ?? "Handmade, for you.",catalogDescription:s.catalogDescription ?? "Every piece is a little different. That is the lovely part.",announcement:s.announcement ?? ""});
-  const [navigation, setNavigation] = useState<string[]>(() => s.navigation ?? [...new Set(ctx.products.map((p) => p.category))].slice(0, 2));
-  const formRef = useRef<HTMLFormElement>(null);
-
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
-
-  async function toggleSetting(key: string, next: boolean) {
-    try {
-      await update({ [key]: next });
-      toast("Setting updated");
-    } catch (error) {
-      toast(friendlyError(error, "Could not update setting"));
-    }
-  }
-
-  async function save() {
-    const f = formRef.current;
-    if (f && !f.checkValidity()) {
-      f.reportValidity();
-      return;
-    }
-    if (!storeName.trim()) { toast("Enter a store name"); return; }
-    if (!Number.isFinite(Number(shippingFee)) || Number(shippingFee) < 0 || !Number.isFinite(Number(freeShippingMin)) || Number(freeShippingMin) < 0) {
-      toast("Delivery amounts must be 0 or more");
-      return;
-    }
-    if (saving) return;
-    setSaving(true);
-    try {
-      const instagramUrl = (socials.find((entry) => entry.network === "instagram")?.url ?? "").trim();
-      await update({ storeName, email, city, shipping: Number(shippingFee), freeShippingMin: Number(freeShippingMin), ...content, instagramUrl, socials: socials.map((entry) => ({ ...entry, url: entry.url.trim() })), supportUrl, navigation: [...new Set(navigation.map((name) => name.trim()).filter(Boolean))] });
-      toast("Settings saved");
-      setDirty(false);
-    } catch (error) {
-      toast(friendlyError(error, "Could not save settings"));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // The inline value in the toggle row saves on its own, so the threshold can
-  // be changed without touching the rest of the form.
-  async function saveThreshold() {
-    const value = Number(freeShippingMin);
-    if (!Number.isFinite(value) || value < 0) {
-      setFreeShippingMin(String(s.freeShippingMin ?? 800));
-      return;
-    }
-    if (value === (s.freeShippingMin ?? 800)) return;
-    try {
-      await update({ freeShippingMin: value });
-      toast("Free delivery threshold updated");
-    } catch (error) {
-      toast(friendlyError(error, "Could not update the threshold"));
-      setFreeShippingMin(String(s.freeShippingMin ?? 800));
-    }
-  }
-
-  // Administrator changes are saved immediately and acknowledged by Convex.
-  // The page never shows an unsaved person as an active administrator.
-  async function persistAdmins(next: string[]) {
-    if (savingAdmins) return false;
-    if (!myEmail || !next.includes(myEmail)) {
-      toast("Keep your own email in the administrator list");
-      return false;
-    }
-    if (!next.length) {
-      toast("At least one administrator is required");
-      return false;
-    }
-    setSavingAdmins(true);
-    try {
-      await update({ adminEmails: next });
-      setAdminEmails(next);
-      toast("Administrator access updated");
-      return true;
-    } catch (error) {
-      toast(friendlyError(error, "Could not update administrators"));
-      return false;
-    } finally {
-      setSavingAdmins(false);
-    }
-  }
-
-  async function addAdmin() {
-    const address = newAdmin.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
-      toast("Enter a valid email address");
-      return;
-    }
-    const effective = [...new Set((authorizedAdmins ?? adminEmails).map((email) => email.toLowerCase()))];
-    if (effective.includes(address)) {
-      toast("That email is already an administrator");
-      setNewAdmin("");
-      return;
-    }
-    if (await persistAdmins([...new Set([...effective, myEmail, address])])) setNewAdmin("");
-  }
-
-  async function removeAdmin(address: string) {
-    if (address === myEmail) {
-      toast("You cannot remove your own administrator access");
-      return;
-    }
-    await persistAdmins(adminEmails.filter((entry) => entry !== address));
-  }
-
-  function moveLink(index: number, offset: number) {
-    setNavigation((current) => {
-      const next = [...current];
-      const destination = index + offset;
-      if (destination < 0 || destination >= next.length) return current;
-      [next[index], next[destination]] = [next[destination], next[index]];
-      return next;
-    });
-  }
-
-  function updateSocial(network: string, patch: Partial<SocialLink>) {
-    setSocials((current) => current.map((entry) => (entry.network === network ? { ...entry, ...patch } : entry)));
-  }
+  const initial = (() => {
+    const fromUrl = new URLSearchParams(location.search).get("tab");
+    if (ctx.view === "shipping") return "delivery";
+    return (TABS.some((t) => t.id === fromUrl) ? fromUrl : "general") as Tab;
+  })();
+  const [tab, setTab] = useState<Tab>(initial);
+  const choose = (next: Tab) => {
+    setTab(next);
+    history.replaceState(history.state, "", "/admin/settings?tab=" + next);
+  };
+  const active = TABS.find((t) => t.id === tab)!;
 
   return (
     <>
-      <Heading
-        title="Settings"
-        subtitle="Everything about your little shop."
-        actions={
-          <button className="btn primary" type="button" onClick={() => void save()} disabled={saving}>
-            {saving ? <><span className="spinner" aria-hidden="true" /> Saving…</> : <><Icon name="check" size="sm" /> Save changes</>}
-          </button>
-        }
-      />
-      <form ref={formRef} className="settings-grid" onSubmit={(e) => { e.preventDefault(); void save(); }}
-        onChange={(e) => { if (!(e.target as HTMLElement).closest(".admin-add, .setting-row")) setDirty(true); }}>
-        <section className="settings-card">
-          <h2>Store details</h2>
-          <p>Your storefront name and contact details.</p>
-          <div className="field">
-            <label htmlFor="sname">Store name</label>
-            <input id="sname" name="storeName" required maxLength={60} value={storeName} onChange={(e) => setStoreName(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="semail">Contact email</label>
-            <input id="semail" type="email" name="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="scity">Location</label>
-            <input id="scity" name="city" value={city} onChange={(e) => setCity(e.target.value)} />
-          </div>
-        </section>
-        <section className="settings-card">
-          <h2>Links & access</h2>
-          <div className="field"><label htmlFor="support">Support link</label><input id="support" type="text" inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="https://wa.me/201xxxxxxxxx or mailto:you@example.com" value={supportUrl} onChange={e => setSupportUrl(e.target.value)} onBlur={e => setSupportUrl(withScheme(e.target.value))} /><small className="field-hint">Shown as “Support” in the header and footer. A WhatsApp link works well.</small></div>
-          <div className="field admin-field">
-            <label>Dashboard administrators</label>
-            <p className="form-help">
-              Only the listed accounts may access the dashboard. A new sign-up never grants access.
-            </p>
-            {adminEmails.length ? (
-              <ul className="admin-list">
-                {adminEmails.map((address) => (
-                  <li key={address}>
-                    <span className="admin-avatar">{(address[0] || "?").toUpperCase()}</span>
-                    <span className="admin-address">
-                      {address}
-                      {address === myEmail ? <em> · you</em> : null}
-                    </span>
-                    <button
-                      type="button"
-                      className="row-action"
-                      aria-label={`Remove ${address}`}
-                      title="Remove administrator"
-                      disabled={savingAdmins}
-                      onClick={() => void removeAdmin(address)}
-                    >
-                      <Icon name="trash" size="sm" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            <div className="admin-add">
-              <input
-                id="newAdmin"
-                type="email"
-                inputMode="email"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                enterKeyHint="done"
-                placeholder="name@example.com"
-                value={newAdmin}
-                onChange={(e) => setNewAdmin(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void addAdmin();
-                  }
-                }}
-              />
-              <button type="button" className="btn secondary" disabled={savingAdmins || authorizedAdmins === undefined} onClick={() => void addAdmin()}>
-                <Icon name="plus" size="sm" /> Add
-              </button>
-            </div>
-            <small>Adding or removing an administrator saves immediately. Only the listed accounts can access the dashboard.</small>
-          </div>
-          <h2>Storefront & header</h2>
-          <p>Choose the categories and collections shown in the storefront navigation. Drag-free controls let you reorder them.</p>
-          <div className="field">
-            <label id="header-links-heading">Header links</label>
-            <div className="header-link-list" role="list" aria-labelledby="header-links-heading">
-              {navigation.map((name, index) => (
-                <div className="header-link-item" role="listitem" key={index}>
-                  <span className="header-link-number" aria-hidden="true">{index + 1}</span>
-                  <input
-                    aria-label={`Header link ${index + 1}`}
-                    placeholder="Category or collection"
-                    value={name}
-                    maxLength={70}
-                    onChange={(e) => setNavigation((current) => current.map((value, i) => i === index ? e.target.value : value))}
-                  />
-                  <div className="header-link-actions">
-                    <button type="button" aria-label={`Move link ${index + 1} up`} title="Move up" disabled={index === 0} onClick={() => moveLink(index, -1)}>↑</button>
-                    <button type="button" aria-label={`Move link ${index + 1} down`} title="Move down" disabled={index === navigation.length - 1} onClick={() => moveLink(index, 1)}>↓</button>
-                    <button type="button" aria-label={`Remove link ${index + 1}`} title="Remove link" onClick={() => setNavigation((current) => current.filter((_, i) => i !== index))}>×</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button type="button" className="btn secondary header-link-add" onClick={() => setNavigation((current) => [...current, ""])}>
-              <Icon name="plus" size="sm" /> Add link
-            </button>
-          </div>
-          {Object.entries(content).map(([key, value]) => {
-            const label = CONTENT_LABELS[key] ?? key;
-            const set = (next: string) => { setContent(current => ({...current, [key]:next})); setDirty(true); };
-            if (key.endsWith("Image")) return <ImageUpload key={key} label={label} value={value} onChange={set} />;
-            return <div className="field" key={key}><label htmlFor={key}>{label}</label>{key.endsWith("Description")
-              ? <textarea id={key} rows={3} maxLength={400} value={value} onChange={e => set(e.target.value)} />
-              : <input id={key} maxLength={key === "announcement" ? 160 : 120} value={value} placeholder={key === "announcement" ? "Optional, e.g. Orders placed today ship Sunday" : undefined} onChange={e => set(e.target.value)} />}</div>;
-          })}
-        </section>
-        <section className="settings-card">
-          <h2>Social links</h2>
-          <p>
-            Instagram, Facebook and TikTok icons appear in the storefront header and footer when enabled.
-            Turn one on, paste its link and save. Your email is set under Store details.
-          </p>
-          {SOCIAL_NETWORKS.map(({ network, label, placeholder }) => {
-            const social = socials.find((entry) => entry.network === network);
-            if (!social) return null;
-            return (
-              <div key={network} className="setting-row social-row">
-                <span className="social-label">
-                  <span className="social-badge"><Icon name={network} size="sm" /></span>
-                  {label}
-                </span>
-                <input
-                  className="social-url"
-                  type="text"
-                  inputMode="url"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  placeholder={placeholder}
-                  aria-label={`${label} link`}
-                  value={social.url}
-                  disabled={!social.enabled}
-                  onChange={(e) => updateSocial(network, { url: e.target.value })}
-                  onBlur={(e) => updateSocial(network, { url: withScheme(e.target.value) })}
-                />
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={social.enabled}
-                  aria-label={`Show ${label} on the storefront`}
-                  className={"toggle" + (social.enabled ? " on" : "")}
-                  onClick={() => updateSocial(network, { enabled: !social.enabled })}
-                >
-                  <i />
-                </button>
-              </div>
-            );
-          })}
-        </section>
-        <section className="settings-card">
-          <h2>Checkout & notifications</h2>
-          <p>Changes apply to the live store.</p>
-          <NotificationSetup />
-          <div className="field">
-            <label htmlFor="shippingFee">Standard delivery fee (EGP)</label>
-            <input id="shippingFee" name="shippingFee" type="text" inputMode="decimal" autoComplete="off" required value={shippingFee} onChange={e => setShippingFee(e.target.value.replace(",", ".").replace(/[^0-9.]/g, ""))} />
-          </div>
-          <div className="field">
-            <label htmlFor="freeShippingMin">Free delivery from (EGP)</label>
-            <input id="freeShippingMin" name="freeShippingMin" type="text" inputMode="decimal" autoComplete="off" required value={freeShippingMin} onChange={e => setFreeShippingMin(e.target.value.replace(",", ".").replace(/[^0-9.]/g, ""))} />
-            <small>Set the amount here, then enable or disable free delivery below. Changes are saved with the other store settings.</small>
-          </div>
-          {TOGGLES.map((t) => (
-            <div key={t.key} className="setting-row">
+      <Heading title="Settings" subtitle="How your store runs: contact details, delivery, checkout and team." />
+      <div className="settings-layout">
+        <nav className="settings-nav" aria-label="Settings sections">
+          {TABS.map((t) => (
+            <button key={t.id} type="button" className={"settings-nav-item" + (t.id === tab ? " active" : "")} aria-current={t.id === tab ? "page" : undefined} onClick={() => choose(t.id)}>
+              <span className="settings-nav-icon"><Icon name={t.icon} size="sm" /></span>
               <span>
-                {t.key === "freeShipping" ? (
-                  <strong className="setting-inline">
-                    Free delivery from EGP
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      enterKeyHint="done"
-                      value={freeShippingMin}
-                      disabled={!s.freeShipping}
-                      onChange={(e) => setFreeShippingMin(e.target.value)}
-                      onBlur={saveThreshold}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          e.currentTarget.blur();
-                        }
-                      }}
-                      aria-label="Free delivery threshold in EGP"
-                    />
-                  </strong>
-                ) : (
-                  <strong>{t.title(s.freeShippingMin)}</strong>
-                )}
-                <small>{t.desc}</small>
+                <strong>{t.label}</strong>
+                <small>{t.hint}</small>
               </span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={!!s[t.key]}
-                aria-label={t.title(s.freeShippingMin)}
-                className={"toggle" + (s[t.key] ? " on" : "")}
-                onClick={() => void toggleSetting(t.key, !s[t.key])}
-              >
-                <i />
-              </button>
-            </div>
-          ))}
-        </section>
-        {dirty ? (
-          <div className="settings-savebar" role="status">
-            <span>You have unsaved changes</span>
-            <button className="btn primary" type="submit" disabled={saving}>
-              {saving ? <><span className="spinner" aria-hidden="true" /> Saving…</> : <>Save changes</>}
             </button>
-          </div>
-        ) : null}
-      </form>
+          ))}
+        </nav>
+        <div className="settings-content" key={active.id}>
+          {tab === "general" ? <GeneralSettings ctx={ctx} /> : null}
+          {tab === "delivery" ? <DeliverySettings ctx={ctx} /> : null}
+          {tab === "checkout" ? <CheckoutSettings ctx={ctx} /> : null}
+          {tab === "team" ? <TeamSettings /> : null}
+        </div>
+      </div>
     </>
   );
 }
 
-const CONTENT_LABELS: Record<string, string> = {
-  logoImage: "Logo",
-  heroTitle: "Homepage headline",
-  heroDescription: "Homepage intro",
-  heroImage: "Homepage image",
-  storyTitle: "Story title",
-  storyDescription: "Story text",
-  storyImage: "Story image",
-  catalogTitle: "Shop page title",
-  catalogDescription: "Shop page intro",
-  announcement: "Announcement bar",
-};
+const SOCIAL_NETWORKS = [
+  { network: "instagram", label: "Instagram", placeholder: "instagram.com/your-page" },
+  { network: "facebook", label: "Facebook", placeholder: "facebook.com/your-page" },
+  { network: "tiktok", label: "TikTok", placeholder: "tiktok.com/@your-page" },
+] as const;
 
-/** "instagram.com/shop" → "https://instagram.com/shop"; mailto:/tel: links untouched. */
-function withScheme(value: string) {
-  const v = value.trim();
-  if (!v || /^[a-z][a-z0-9+.-]*:/i.test(v)) return v;
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return "mailto:" + v;
-  return "https://" + v.replace(/^\/+/, "");
+function GeneralSettings({ ctx }: { ctx: AdminCtx }) {
+  const s = ctx.settings;
+  const form = useSettingsDraft(
+    () => ({
+      storeName: s.storeName,
+      email: s.email,
+      phone: s.phone ?? "",
+      whatsapp: s.whatsapp ?? "",
+      address: s.address ?? "",
+      city: s.city,
+      supportUrl: s.supportUrl ?? "",
+      socials: SOCIAL_NETWORKS.map(({ network }) => {
+        const found = (s.socials ?? []).find((entry) => entry.network === network);
+        const legacy = network === "instagram" ? s.instagramUrl ?? "" : "";
+        return found ? { ...found } : { network, url: legacy, enabled: Boolean(legacy) };
+      }),
+    }),
+    (d) => {
+      if (!d.storeName.trim()) return "Enter your store name";
+      if (d.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email.trim())) return "Enter a valid contact email";
+      const socials = d.socials.map((entry) => ({ ...entry, url: withScheme(entry.url) }));
+      return {
+        storeName: d.storeName.trim(),
+        email: d.email.trim(),
+        phone: d.phone,
+        whatsapp: d.whatsapp.replace(/[^\d+]/g, ""),
+        address: d.address,
+        city: d.city.trim(),
+        supportUrl: withScheme(d.supportUrl),
+        socials,
+        instagramUrl: socials.find((x) => x.network === "instagram")?.url ?? "",
+      };
+    },
+  );
+  const d = form.draft;
+  return (
+    <>
+      <Section icon="shop" title="Store" description="Shown in the header, footer, receipts and search results.">
+        <TextField id="storeName" label="Store name" required maxLength={60} value={d.storeName} onChange={(v) => form.set("storeName", v)} />
+        <div className="grid-2">
+          <TextField id="email" label="Contact email" type="email" inputMode="email" required value={d.email} onChange={(v) => form.set("email", v)} />
+          <TextField id="phone" label="Phone" inputMode="tel" placeholder="010 1234 5678" value={d.phone} onChange={(v) => form.set("phone", v)} />
+        </div>
+        <div className="grid-2">
+          <TextField id="whatsapp" label="WhatsApp number" inputMode="tel" placeholder="201012345678" hint="With country code. Adds a WhatsApp button for customers." value={d.whatsapp} onChange={(v) => form.set("whatsapp", v)} />
+          <TextField id="city" label="City" required value={d.city} onChange={(v) => form.set("city", v)} />
+        </div>
+        <TextField id="address" label="Business address" placeholder="Studio address, if you want it on receipts and pages" value={d.address} onChange={(v) => form.set("address", v)} />
+        <TextField id="supportUrl" label="Support link" inputMode="url" placeholder="wa.me/201012345678 or you@example.com" hint="The “Support” link in your store header and footer." value={d.supportUrl} onChange={(v) => form.set("supportUrl", v)} />
+      </Section>
+      <Section icon="globe" title="Social profiles" description="Icons appear in your store header and footer when turned on.">
+        {SOCIAL_NETWORKS.map(({ network, label, placeholder }) => {
+          const social = d.socials.find((entry) => entry.network === network)!;
+          const update = (patch: Partial<typeof social>) => form.set("socials", d.socials.map((entry) => (entry.network === network ? { ...entry, ...patch } : entry)));
+          return (
+            <div key={network} className="social-editor">
+              <span className="social-badge"><Icon name={network} size="sm" /></span>
+              <input aria-label={`${label} link`} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder={placeholder} value={social.url} disabled={!social.enabled}
+                onChange={(e) => update({ url: e.target.value })} onBlur={(e) => update({ url: withScheme(e.target.value) })} />
+              <button type="button" role="switch" aria-checked={social.enabled} aria-label={`Show ${label}`} className={"toggle" + (social.enabled ? " on" : "")} onClick={() => update({ enabled: !social.enabled })}><i /></button>
+            </div>
+          );
+        })}
+      </Section>
+      <SaveBar dirty={form.dirty} saving={form.saving} onSave={() => void form.save()} onDiscard={form.discard} />
+    </>
+  );
+}
+
+type ZoneDraft = { name: string; fee: string; eta: string; enabled: boolean };
+const EGYPT_ZONES: { name: string; fee: number; eta: string }[] = [
+  { name: "Cairo", fee: 60, eta: "1–2 days" },
+  { name: "Giza", fee: 60, eta: "1–2 days" },
+  { name: "Alexandria", fee: 70, eta: "2–3 days" },
+  { name: "Delta & Canal cities", fee: 75, eta: "2–4 days" },
+  { name: "Upper Egypt", fee: 90, eta: "3–5 days" },
+  { name: "Red Sea & Sinai", fee: 110, eta: "4–6 days" },
+];
+
+function DeliverySettings({ ctx }: { ctx: AdminCtx }) {
+  const s = ctx.settings;
+  const form = useSettingsDraft(
+    () => ({
+      shipping: String(s.shipping ?? 65),
+      freeShipping: s.freeShipping,
+      freeShippingMin: String(s.freeShippingMin ?? 800),
+      returnDays: String(s.returnDays ?? 14),
+      zones: (s.zones ?? []).map((z) => ({ name: z.name, fee: String(z.fee), eta: z.eta ?? "", enabled: z.enabled })) as ZoneDraft[],
+    }),
+    (d) => {
+      const fee = Number(d.shipping), min = Number(d.freeShippingMin), days = Number(d.returnDays);
+      if (!d.shipping.trim() || !Number.isFinite(fee) || fee < 0) return "Enter a standard delivery fee of 0 or more";
+      if (!Number.isFinite(min) || min < 0) return "Enter a free delivery amount of 0 or more";
+      if (!Number.isInteger(days) || days < 14) return "Returns must be allowed for at least 14 days";
+      const zones = d.zones.filter((z) => z.name.trim());
+      if (zones.some((z) => !Number.isFinite(Number(z.fee)) || z.fee.trim() === "")) return "Every delivery area needs a fee";
+      return { shipping: fee, freeShipping: d.freeShipping, freeShippingMin: min, returnDays: days, zones: zones.map((z) => ({ name: z.name.trim(), fee: Number(z.fee), eta: z.eta.trim() || undefined, enabled: z.enabled })) };
+    },
+  );
+  const d = form.draft;
+  const setZone = (i: number, patch: Partial<ZoneDraft>) => form.set("zones", d.zones.map((z, j) => (j === i ? { ...z, ...patch } : z)));
+  const activeZones = d.zones.filter((z) => z.enabled && z.name.trim()).length;
+  return (
+    <>
+      <Section icon="truck" title="Delivery fee" description={activeZones ? "Used when a customer's area isn't listed below." : "Charged on every order unless free delivery applies."}>
+        <div className="grid-2">
+          <TextField id="shipping" label="Standard delivery fee (EGP)" required inputMode="decimal" value={d.shipping} onChange={(v) => form.set("shipping", v)} />
+          <TextField id="freeShippingMin" label="Free delivery on orders from (EGP)" required inputMode="decimal" value={d.freeShippingMin} onChange={(v) => form.set("freeShippingMin", v)} />
+        </div>
+        <Toggle label="Offer free delivery" description={d.freeShipping ? `Orders of ${money(Number(d.freeShippingMin) || 0)} or more ship free.` : "Every order pays the delivery fee."} checked={d.freeShipping} onChange={(v) => form.set("freeShipping", v)} />
+      </Section>
+      <Section
+        icon="map"
+        title="Delivery areas"
+        description="Charge different fees by area. When any area is on, customers choose theirs at checkout."
+        actions={!d.zones.length ? (
+          <button type="button" className="btn secondary small" onClick={() => form.set("zones", EGYPT_ZONES.map((z) => ({ name: z.name, fee: String(z.fee), eta: z.eta, enabled: true })))}>
+            <Icon name="sparkle" size="sm" /> Use Egypt presets
+          </button>
+        ) : undefined}
+      >
+        {d.zones.length ? (
+          <div className="zone-table" role="table" aria-label="Delivery areas">
+            <div className="zone-row zone-head" role="row">
+              <span role="columnheader">Area</span><span role="columnheader">Fee (EGP)</span><span role="columnheader">Delivery time</span><span role="columnheader" className="sr-only">Actions</span>
+            </div>
+            {d.zones.map((zone, i) => (
+              <div className={"zone-row" + (zone.enabled ? "" : " off")} role="row" key={i}>
+                <input aria-label="Area name" placeholder="e.g. Cairo" value={zone.name} onChange={(e) => setZone(i, { name: e.target.value })} />
+                <input aria-label="Fee" inputMode="decimal" placeholder="60" value={zone.fee} onChange={(e) => setZone(i, { fee: e.target.value.replace(/[^0-9.]/g, "") })} />
+                <input aria-label="Delivery time" placeholder="1–2 days" value={zone.eta} onChange={(e) => setZone(i, { eta: e.target.value })} />
+                <span className="zone-actions">
+                  <button type="button" role="switch" aria-checked={zone.enabled} aria-label={`Deliver to ${zone.name || "this area"}`} className={"toggle small" + (zone.enabled ? " on" : "")} onClick={() => setZone(i, { enabled: !zone.enabled })}><i /></button>
+                  <button type="button" className="row-action" aria-label={`Remove ${zone.name || "area"}`} onClick={() => form.set("zones", d.zones.filter((_, j) => j !== i))}><Icon name="trash" size="sm" /></button>
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="form-help">No areas yet. Everyone pays the standard fee.</p>
+        )}
+        <button type="button" className="btn secondary small" onClick={() => form.set("zones", [...d.zones, { name: "", fee: "", eta: "", enabled: true }])}>
+          <Icon name="plus" size="sm" /> Add area
+        </button>
+      </Section>
+      <Section icon="undo" title="Returns" description="Customers can request a return from the order tracking page within this window after delivery.">
+        <TextField id="returnDays" label="Return window (days)" required inputMode="numeric" value={d.returnDays} onChange={(v) => form.set("returnDays", v)} hint="Egyptian consumer law gives buyers at least 14 days. Custom-made items can be excluded in your returns policy." />
+      </Section>
+      <SaveBar dirty={form.dirty} saving={form.saving} onSave={() => void form.save()} onDiscard={form.discard} />
+    </>
+  );
+}
+
+function CheckoutSettings({ ctx }: { ctx: AdminCtx }) {
+  const s = ctx.settings;
+  const form = useSettingsDraft(
+    () => ({ guestCheckout: s.guestCheckout, notifications: s.notifications }),
+    (d) => ({ guestCheckout: d.guestCheckout, notifications: d.notifications }),
+  );
+  return (
+    <>
+      <Section icon="card" title="Checkout" description="Payment is cash on delivery. Customers confirm by phone before you ship.">
+        <Toggle label="Guest checkout" description="Customers can order without creating an account. Recommended." checked={form.draft.guestCheckout} onChange={(v) => form.set("guestCheckout", v)} />
+        <div className="info-row"><Icon name="shield" size="sm" /> Fake-order protection is on: hidden bot trap, and at most 3 orders per phone number every 15 minutes.</div>
+      </Section>
+      <Section icon="bell" title="New order alerts" description="Get a notification on this device when an order comes in.">
+        <Toggle label="Order alerts" description="Turn alerts on for the whole store." checked={form.draft.notifications} onChange={(v) => form.set("notifications", v)} />
+        <NotificationSetup />
+      </Section>
+      <SaveBar dirty={form.dirty} saving={form.saving} onSave={() => void form.save()} onDiscard={form.discard} />
+    </>
+  );
+}
+
+function TeamSettings() {
+  const toast = useToast();
+  const update = useMutation(api.settings.update);
+  const roster = useQuery(api.access.roster);
+  const [emails, setEmails] = useState<string[]>([]);
+  useEffect(() => { if (roster) setEmails(roster); }, [roster]);
+  const [newAdmin, setNewAdmin] = useState("");
+  const [busy, setBusy] = useState(false);
+  const { user } = useUser();
+  const me = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
+
+  async function persist(next: string[]) {
+    if (!me || !next.includes(me)) return toast("Keep your own email in the list");
+    setBusy(true);
+    try {
+      await update({ adminEmails: next });
+      setEmails(next);
+      toast("Team updated");
+      return true;
+    } catch (error) {
+      toast(friendlyError(error, "Could not update the team"));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function add() {
+    const address = newAdmin.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) return toast("Enter a valid email address");
+    if (emails.includes(address)) return toast("Already on the team");
+    if (await persist([...new Set([...emails, me, address])])) setNewAdmin("");
+  }
+  return (
+    <Section icon="users" title="Administrators" description="People who can sign in to this dashboard. Changes save right away.">
+      {roster === undefined ? <div className="page-spinner" style={{ minHeight: 120 }}><span className="spinner" /></div> : (
+        <ul className="admin-list">
+          {emails.map((address) => (
+            <li key={address}>
+              <span className="admin-avatar">{(address[0] || "?").toUpperCase()}</span>
+              <span className="admin-address">{address}{address === me ? <em> · you</em> : null}</span>
+              {address !== me ? (
+                <button type="button" className="row-action" aria-label={`Remove ${address}`} disabled={busy} onClick={() => void persist(emails.filter((e) => e !== address))}>
+                  <Icon name="trash" size="sm" />
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      <form className="admin-add" onSubmit={(e) => { e.preventDefault(); void add(); }}>
+        <input type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="done" aria-label="Email to add" placeholder="name@example.com" value={newAdmin} onChange={(e) => setNewAdmin(e.target.value)} />
+        <button type="submit" className="btn secondary" disabled={busy || roster === undefined}><Icon name="plus" size="sm" /> Add</button>
+      </form>
+      <p className="form-help">They sign in with this email at <strong>/admin</strong>. Signing up alone never grants access.</p>
+    </Section>
+  );
 }

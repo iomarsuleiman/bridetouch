@@ -2,17 +2,20 @@ import { UserButton } from "@clerk/react";
 import { Icon } from "../components/Icon";
 
 const NAMES: Record<string, string> = {
-  overview: "Overview",
+  overview: "Home",
   orders: "Orders",
   products: "Products",
   collections: "Collections",
   customers: "Customers",
-  discounts: "Discounts",
+  discounts: "Discount codes",
   sales: "Sales",
-  offers: "Offers & campaigns",
+  offers: "Banners",
   analytics: "Analytics",
-  shipping: "Shipping & delivery",
+  shipping: "Settings",
   settings: "Settings",
+  appearance: "Appearance",
+  navigation: "Navigation",
+  pages: "Pages & policies",
 };
 
 // Port of the vanilla topbar().

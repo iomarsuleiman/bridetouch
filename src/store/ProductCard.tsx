@@ -16,6 +16,8 @@ export function ProductCard({ product: p, eager = false }: { product: Doc<"produ
   const collections = useQuery(api.collections.list) ?? [];
   const savings = saleDiscount([{ number: p.number, subtotal: p.price }], sales, collections, Date.now());
   const soldOut = p.stock <= 0;
+  const compareAt = p.compareAtPrice && p.compareAtPrice > p.price ? p.compareAtPrice : 0;
+  const second = p.images?.[0];
   const lowStock = !soldOut && p.stock <= 3;
   const href = "/product/" + p.number;
 
@@ -33,15 +35,16 @@ export function ProductCard({ product: p, eager = false }: { product: Doc<"produ
     toast(`${p.name} added to your bag`);
   };
 
-  const tag = soldOut ? "Sold out" : savings ? `${Math.round((savings / p.price) * 100)}% off` : p.tag;
+  const tag = soldOut ? "Sold out" : savings ? `${Math.round((savings / p.price) * 100)}% off` : compareAt ? `${Math.round((1 - p.price / compareAt) * 100)}% off` : p.tag;
 
   return (
     <article className={"product-tile reveal" + (soldOut ? " is-sold-out" : "")}>
       <div className="product-photo">
         <a href={href} onClick={linkHandler(href)} className="product-link" aria-label={p.name}>
           <SmartImage src={p.img} alt={p.name} loading={eager ? "eager" : "lazy"} />
+          {second ? <SmartImage className="hover-photo" src={second} alt="" loading="lazy" /> : null}
         </a>
-        {tag ? <span className={"tile-tag" + (soldOut ? " sold" : savings ? " sale" : "")}>{tag}</span> : null}
+        {tag ? <span className={"tile-tag" + (soldOut ? " sold" : savings || compareAt ? " sale" : "")}>{tag}</span> : null}
         {!soldOut ? (
           <button
             type="button"
@@ -64,7 +67,11 @@ export function ProductCard({ product: p, eager = false }: { product: Doc<"produ
         <strong className="product-price">
           {savings ? (
             <>
-              <s className="old-price">{money(p.price)}</s> <span className="sale-price">{money(p.price - savings)}</span>
+              <s className="old-price">{money(compareAt || p.price)}</s> <span className="sale-price">{money(p.price - savings)}</span>
+            </>
+          ) : compareAt ? (
+            <>
+              <s className="old-price">{money(compareAt)}</s> <span className="sale-price">{money(p.price)}</span>
             </>
           ) : (
             money(p.price)
