@@ -925,3 +925,51 @@ select{appearance:none;-webkit-appearance:none;background:#fff url("data:image/s
 .checkout-form select{min-height:46px;width:100%}
 .confirm-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
 @media(max-width:900px){.store-header{width:auto}}
+
+/* ===================================================================
+   Theme: store colors from Appearance (see src/lib/theme.ts).
+   =================================================================== */
+:root{--brand:#355241;--brand-dark:#2b4335;--brand-soft:#e6ece7;--brand-ink:#fff;--accent:#cb887a;--accent-soft:#f7e7e3;--accent-ink:#fff}
+.store .btn.primary,.sheet .btn.primary,.store-frame~.sheet .btn.primary{background:var(--brand);color:var(--brand-ink);border-color:var(--brand);box-shadow:0 6px 16px -6px color-mix(in srgb,var(--brand) 55%,transparent)}
+.store .btn.primary:not(:disabled):hover,.sheet .btn.primary:not(:disabled):hover{background:var(--brand-dark);border-color:var(--brand-dark)}
+.store .btn.primary:disabled{background:color-mix(in srgb,var(--brand) 50%,#fff)}
+.store .demo-banner{background:var(--brand);color:var(--brand-ink)}
+.store .store-announcement{background:var(--brand-soft);color:var(--brand-dark)}
+.store .chip.on{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+.store .hero-copy h1 em,.store .hero-title em{color:var(--accent)}
+.store .cart-count{background:var(--accent);color:var(--accent-ink)}
+.store .qty-step button:hover:not(:disabled){color:var(--brand)}
+.store .gallery-thumbs button.on{box-shadow:0 0 0 2px var(--brand)}
+.store .track-steps:after,.store .track-steps li.done .dot{background:var(--brand)}
+.store .track-steps li.current .dot{box-shadow:0 0 0 3px var(--brand),0 0 0 8px color-mix(in srgb,var(--brand) 14%,transparent)}
+.store .track-icon,.store .status-orb{color:var(--brand)}
+.store .ask-link,.store .prose a{color:var(--brand)}
+.store input:focus,.store textarea:focus,.store select:focus{border-color:color-mix(in srgb,var(--brand) 45%,#fff);box-shadow:0 0 0 3px var(--brand-soft)}
+.store .remember-row input{accent-color:var(--brand)}
+.tile-tag.sale{background:var(--accent)!important;color:var(--accent-ink)!important}
+
+/* Header: logo · centered menu · actions, with a visible active item */
+@media(min-width:901px){
+  .store-header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:16px}
+  .store-header .brand{justify-self:start}
+  .store-header .header-actions{justify-self:end}
+  .store-header .store-nav{justify-self:center;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;max-width:min(640px,52vw)}
+  .store-header .store-nav::-webkit-scrollbar{display:none}
+  .store-nav>a{white-space:nowrap;color:#5b665d}
+  .store-nav>a.active{background:var(--brand-soft);color:var(--brand-dark);box-shadow:none}
+  .store-nav>a:hover:not(.active){background:#0000000a;color:#2b3a2f}
+  .header-actions .cart-trigger{background:var(--brand);color:var(--brand-ink)}
+  .header-actions .cart-trigger:hover{background:var(--brand-dark)}
+}
+@media(max-width:900px){
+  .store-nav.open>a.active{color:var(--brand-dark)}
+  .store-nav.open>a.active:before{background:var(--accent)}
+}
+
+/* Appearance preview follows the same variables */
+.preview-announce{background:var(--brand);color:var(--brand-ink)}
+.preview-cta{background:var(--brand);color:var(--brand-ink)}
+.preview-hero h3 em{color:var(--accent);font-style:normal}
+.preview-grid b{color:var(--accent)}
+.preview-pill{background:var(--brand)}
+.preview-header .img-fallback{min-height:0;width:22px;height:22px;border-radius:50%}

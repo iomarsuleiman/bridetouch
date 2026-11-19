@@ -36,7 +36,8 @@ export function effectiveLinks(
   collections: string[],
 ): NavLink[] {
   if (settings?.navLinks?.length) return settings.navLinks;
-  const names = settings?.navigation ?? categories.slice(0, 2);
+  // An empty saved list (older stores) falls back to the first categories.
+  const names = settings?.navigation?.length ? settings.navigation : categories.slice(0, 3);
   return [
     { label: "Home", type: "home" },
     { label: "Shop all", type: "catalog" },

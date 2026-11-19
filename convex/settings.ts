@@ -49,6 +49,7 @@ export const update = mutation({
     address: v.optional(v.string()),
     returnDays: v.optional(v.number()),
     accentColor: v.optional(v.string()),
+    brandColor: v.optional(v.string()),
     email: v.optional(v.string()),
     city: v.optional(v.string()),
     shipping: v.optional(v.number()),
@@ -106,7 +107,9 @@ export const update = mutation({
     if (fields.returnDays !== undefined && (!Number.isInteger(fields.returnDays) || fields.returnDays < 14 || fields.returnDays > 365)) {
       throw new Error("The return window must be at least 14 days (Egyptian consumer law)");
     }
-    if (fields.accentColor !== undefined && fields.accentColor && !/^#[0-9a-f]{6}$/i.test(fields.accentColor)) throw new Error("Pick a valid color");
+    for (const color of [fields.accentColor, fields.brandColor]) {
+      if (color && !/^#[0-9a-f]{6}$/i.test(color)) throw new Error("Pick a valid color");
+    }
     for (const key of ["phone", "whatsapp", "address"] as const) {
       if (fields[key] !== undefined) fields[key] = fields[key]!.trim().slice(0, 300);
     }
