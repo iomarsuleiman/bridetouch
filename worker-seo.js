@@ -152,17 +152,36 @@ async function pageMeta(url, route, convexUrl) {
   return { ...base, canonical: `${url.origin}/` };
 }
 
-class SetAttr {
-  constructor(attr, value) { this.attr = attr; this.value = value; }
-  element(el) { if (this.value) el.setAttribute(this.attr, this.value); }
+const attr = (text) => String(text ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+/** Rewrites the SPA shell's <head> for one page. Plain string edits, so it
+ *  runs anywhere (Cloudflare Workers, Vercel Functions, Node). */
+export function applyMeta(html, meta) {
+  const setMeta = (source, selector, value) => {
+    if (!value) return source;
+    const re = new RegExp(`(<meta\\s+${selector}\\s+content=")[^"]*(")`, "i");
+    return source.replace(re, `$1${attr(value)}$2`);
+  };
+  let out = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${attr(meta.title)}</title>`);
+  out = setMeta(out, 'name="description"', meta.description);
+  out = setMeta(out, 'property="og:title"', meta.title);
+  out = setMeta(out, 'property="og:description"', meta.description);
+  out = setMeta(out, 'property="og:image"', meta.image);
+  out = setMeta(out, 'property="og:type"', meta.type);
+  out = setMeta(out, 'property="og:site_name"', meta.store);
+  out = setMeta(out, 'name="twitter:card"', meta.image ? "summary_large_image" : "summary");
+  const head = [
+    meta.canonical && !meta.noindex ? `<link rel="canonical" href="${attr(meta.canonical)}">` : "",
+    meta.noindex ? `<meta name="robots" content="noindex">` : "",
+    meta.canonical ? `<meta property="og:url" content="${attr(meta.canonical)}">` : "",
+    meta.jsonLd ? `<script type="application/ld+json" id="ld-product">${safeJson(meta.jsonLd)}</script>` : "",
+  ].join("");
+  return out.replace(/<\/head>/i, head + "</head>");
 }
 
-/**
- * Given the SPA's index.html response, returns it rewritten for this URL.
- * `indexResponse` must be the HTML shell for the app.
- */
-export async function renderPage(request, indexResponse, convexUrl) {
-  const url = new URL(request.url);
+/** Builds the HTML for an app route: tailored tags and the right status.
+ *  Never fails: without backend data the shell is served unchanged. */
+export async function renderHtml(url, html, convexUrl) {
   const route = classify(url.pathname);
   let meta = null;
   try {
@@ -170,26 +189,16 @@ export async function renderPage(request, indexResponse, convexUrl) {
   } catch (error) {
     console.error("SEO metadata unavailable", error);
   }
-  if (!meta || typeof HTMLRewriter === "undefined") {
-    // Even without metadata, a structurally unknown path is still a 404.
-    return route.view === "notfound" ? new Response(indexResponse.body, { status: 404, headers: indexResponse.headers }) : indexResponse;
-  }
-  const head = [
-    meta.canonical && !meta.noindex ? `<link rel="canonical" href="${xml(meta.canonical)}">` : "",
-    meta.noindex ? `<meta name="robots" content="noindex">` : "",
-    meta.canonical ? `<meta property="og:url" content="${xml(meta.canonical)}">` : "",
-    meta.jsonLd ? `<script type="application/ld+json" id="ld-product">${safeJson(meta.jsonLd)}</script>` : "",
-  ].join("");
-  const rewritten = new HTMLRewriter()
-    .on("title", { element: (el) => el.setInnerContent(meta.title) })
-    .on('meta[name="description"]', new SetAttr("content", meta.description))
-    .on('meta[property="og:title"]', new SetAttr("content", meta.title))
-    .on('meta[property="og:description"]', new SetAttr("content", meta.description))
-    .on('meta[property="og:image"]', new SetAttr("content", meta.image))
-    .on('meta[property="og:type"]', new SetAttr("content", meta.type))
-    .on('meta[property="og:site_name"]', new SetAttr("content", meta.store))
-    .on('meta[name="twitter:card"]', new SetAttr("content", meta.image ? "summary_large_image" : "summary"))
-    .on("head", { element: (el) => el.append(head, { html: true }) })
-    .transform(indexResponse);
-  return new Response(rewritten.body, { status: meta.status, headers: rewritten.headers });
+  const status = meta?.status ?? (route.view === "notfound" ? 404 : 200);
+  return { status, html: meta ? applyMeta(html, meta) : html, noindex: !!(meta?.noindex ?? route.noindex) };
+}
+
+/** Cloudflare helper: given the SPA's index.html response, returns it
+ *  rewritten for this request's URL. */
+export async function renderPage(request, indexResponse, convexUrl) {
+  const { status, html } = await renderHtml(new URL(request.url), await indexResponse.text(), convexUrl);
+  const headers = new Headers(indexResponse.headers);
+  headers.delete("Content-Length");
+  headers.delete("Content-Encoding");
+  return new Response(html, { status, headers });
 }

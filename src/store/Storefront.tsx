@@ -170,7 +170,7 @@ export default function Storefront({ route }: { route: StoreRoute }) {
           <a className="skip-link" href="#main">Skip to content</a>
           <PromoBanner />
           {settings?.announcement ? <div className="store-announcement">{settings.announcement}</div> : null}
-          <header className="store-header">
+          <header className={"store-header" + (mobileNav ? " menu-open" : "")}>
               <button
                 type="button"
                 className="btn icon-only ghost store-mobile-menu"
@@ -201,7 +201,10 @@ export default function Storefront({ route }: { route: StoreRoute }) {
               >
                 Shop all
               </a>
-              {(settings?.navigation ?? [...new Set((products ?? []).map(product => product.category))].slice(0,2)).map(name => {
+              {(settings?.navigation ?? [...new Set((products ?? []).map(product => product.category))].slice(0,2))
+                // A category literally named "Home" or "Shop all" would show up twice next to the fixed links.
+                .filter((name) => !["home", "shop all"].includes(name.trim().toLowerCase()))
+                .map(name => {
                 const href = "/catalog?category=" + encodeURIComponent(name);
                 const active = route.view === "catalog" && storeCategory === name;
                 return <a key={name} href={href} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={linkHandler(href, () => goToCategory(name))}>{name}</a>;

@@ -87,13 +87,22 @@ async function verifyClerkToken(request) {
   return ok && typeof payload.sub === "string" ? { userId: payload.sub, token } : null;
 }
 
+// ALLOWED_ORIGINS entries are exact origins, or patterns with one "*" that
+// matches a single DNS label part, e.g. "https://bridetouch-*-wareedio.vercel.app"
+// for Vercel preview deployments. A "*" never matches dots or slashes.
+function originMatches(pattern, origin) {
+  if (!pattern.includes("*")) return pattern === origin;
+  const re = new RegExp("^" + pattern.split("*").map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[a-z0-9-]+") + "$", "i");
+  return re.test(origin);
+}
+
 // --- Worker ---
 
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin");
-    const origins = (env.ALLOWED_ORIGINS || ALLOWED_ORIGINS.join(",")).split(",").map(value => value.trim());
-    const allowedOrigin = origins.includes(origin) ? origin : null;
+    const origins = (env.ALLOWED_ORIGINS || ALLOWED_ORIGINS.join(",")).split(",").map(value => value.trim()).filter(Boolean);
+    const allowedOrigin = origin && origins.some(pattern => originMatches(pattern, origin)) ? origin : null;
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {

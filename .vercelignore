@@ -1,0 +1,6 @@
+# Cloudflare-only files. The image upload Worker in api/ is deployed to
+# Cloudflare separately; it must not become a Vercel Function.
+api/worker.js
+api/wrangler.jsonc
+.wrangler
+.worker-bundle
