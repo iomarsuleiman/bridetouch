@@ -13,6 +13,7 @@ export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
   const add = useMutation(api.collections.add);
   const removeCollection = useMutation(api.collections.remove);
+  const removeCategory = useMutation(api.categories.remove);
   const addCategory = useMutation(api.categories.add);
   const savedCategories = useQuery(api.categories.list) ?? [];
   const [newCategory, setNewCategory] = useState("");
@@ -25,6 +26,15 @@ export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
       toast(`${name} deleted`);
     } catch (error) {
       toast(friendlyError(error, "Could not delete collection"));
+    }
+  }
+
+  async function deleteCategory(id: Id<"categories">, name: string) {
+    try {
+      await removeCategory({ id });
+      toast(`${name} deleted`);
+    } catch (error) {
+      toast(friendlyError(error, "Could not delete category"));
     }
   }
 
@@ -116,6 +126,7 @@ export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
             {categories.map((name) => {
               const products = ctx.products.filter((product) => product.category === name);
               const alreadySaved = ctx.collections.some((collection) => collection.name.toLowerCase() === name.toLowerCase());
+              const saved = savedCategories.find((entry) => entry.name.toLowerCase() === name.toLowerCase());
               const image = products.find((product) => product.img)?.img;
               return (
                 <article key={name} className="collection-card">
@@ -125,10 +136,15 @@ export function CollectionsPage({ ctx }: { ctx: AdminCtx }) {
                       <strong>{name}</strong>
                       <small>{products.length} {products.length === 1 ? "product" : "products"} · Category</small>
                     </span>
-                    <button type="button" className="btn secondary" disabled={alreadySaved || creating !== null}
-                      onClick={() => void createFromCategory(name)}>
-                      {alreadySaved ? "Added" : creating === name ? "Creating…" : "Create collection"}
-                    </button>
+                    <span className="row-actions">
+                      {saved && !products.length ? (
+                        <DeleteButton label="" onDelete={() => deleteCategory(saved._id, name)} />
+                      ) : null}
+                      <button type="button" className="btn secondary" disabled={alreadySaved || creating !== null}
+                        onClick={() => void createFromCategory(name)}>
+                        {alreadySaved ? "Added" : creating === name ? "Creating…" : "Create collection"}
+                      </button>
+                    </span>
                   </div>
                 </article>
               );
