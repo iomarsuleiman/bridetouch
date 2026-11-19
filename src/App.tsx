@@ -1,7 +1,7 @@
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { lazy, Suspense, useEffect } from "react";
-import { Show, SignInButton, SignOutButton } from "@clerk/react";
+import { Show, SignInButton, SignOutButton, useUser } from "@clerk/react";
 import { useHashRoute } from "./hooks/useHashRoute";
 import { Icon } from "./components/Icon";
 import Storefront from "./store/Storefront";
@@ -83,6 +83,8 @@ function SignInPrompt() {
 
 function AdminAccess({view}:{view:string}) {
   const allowed = useQuery(api.access.current);
+  const { user } = useUser();
+  const email = user?.primaryEmailAddress?.emailAddress;
   if (allowed === undefined) return <PageSpinner label="Checking access…" />;
   if (!allowed) {
     return (
@@ -100,7 +102,8 @@ function AdminAccess({view}:{view:string}) {
             Administrator access required
           </h1>
           <p style={{ color: "#888d85", margin: "0 0 20px" }}>
-            This account cannot manage the store. Sign out to use an administrator account.
+            {email ? <><strong style={{ color: "#4c574d" }}>{email}</strong> isn't an administrator of this store.</> : "This account cannot manage the store."}{" "}
+            Sign out to use an administrator account, or ask the store owner to add this email in Settings → Administrators.
           </p>
           <SignOutButton redirectUrl="/admin">
             <button type="button" className="btn primary" style={{ padding: "12px 22px" }}>
